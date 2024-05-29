@@ -3,7 +3,7 @@ import requests
 import traceback
 from datetime import datetime
 from .models import db, Usuario, Transacao, Validador
-from .validador import gerenciar_consenso, lista_validadores
+from .validador import gerenciar_consenso, lista_validadores, update_flags_validador, hold_validador_, registrar_validador_, remover_validador_
 
 # Criar o blueprint para as rotas
 bp = Blueprint('routes', __name__)
@@ -71,14 +71,14 @@ def registrar_validador():
     endereco = dados.get('endereco')
     stake = dados.get('stake')
     key = dados.get('key')
-    resultado = registrar_validador(endereco, stake, key)
+    resultado = registrar_validador_(endereco, stake, key)
     return jsonify(resultado), resultado['staus_code']
 
 @bp.route('/seletor/remover', methods=['POST'])
 def remover_validador():
     dados = request.json
     endereco = dados.get('endereco')
-    resultado = remover_validador(endereco)
+    resultado = remover_validador_(endereco)
     return jsonify(resultado), resultado['staus_code']
 
 @bp.route('/seletor/listar', methods=['GET'])
@@ -86,4 +86,19 @@ def listar_validadores():
     resultado = lista_validadores()
     return jsonify(resultado[0]), resultado[1]
 
+# Rota pra aplicar flags aos validadores
+@bp.route('/seletor/flag', methods=['POST'])
+def flag_validador():
+    dados = request.json
+    endereco = dados.get('endereco')
+    acao = dados.get('acao') # 'add' para adiconar flag e 'remover' para remover
+    resultado = update_flags_validador(endereco, acao)
+    return jsonify(resultado), resultado['status_code']
+
+@bp.route('/seletor/hold', methods=['POST'])
+def hold_validador():
+    dados = request.json
+    endereco = dados.get('endereco')
+    resultado = hold_validador_(endereco)
+    return jsonify(resultado), resultado['status_code']
 

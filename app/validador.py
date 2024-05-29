@@ -97,3 +97,38 @@ def lista_validadores():
     validadores = Validador.query.all()
     dados_validadores = [{'endereco': validador.endereco, 'stake': validador.stake} for validador in validadores]
     return {'validadores': dados_validadores}, 200
+
+def update_flags_validador(endereco, acao):
+    validador = Validador.query.filter_by(endereco=endereco).first()
+    if not validador:
+        return {'mensagem': f'Endereço {endereco} não foi encontrado', 'status_code': 404}
+    if acao == 'add':
+        validador.flag = min(validador.flag + 1, 2)
+    elif acao == 'remover':
+        validador.flag = max(validador.flag - 1, 0)
+    else:
+        return {'mensagem': f'Endereço {endereco} não foi encontrado', 'status_code': 404}
+
+    db.session.commit()
+    return {'mensagem': 'Flag de validador atualizado', 'status_code': 200}
+
+def hold_validador_(endereco):
+    validador = Validador.query.filter_by(endereco=endereco).first()
+    if not validador:
+        return {'mensagem': f'Endereço {endereco} não foi encontrado', 'status_code': 404}
+
+    validador.status = 'on_hold'
+    db.session.commit()
+    return {'mensagem': f'Validador de endereço {endereco} está on hold', 'status_code': 200}
+
+def registrar_validador_():
+    #to do
+    return
+
+def remover_validador_():
+    #to do
+    return
+
+def validar_transacao():
+    #to do
+    return
