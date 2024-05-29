@@ -13,8 +13,8 @@ class teste_rotas(unittest.TestCase):
             db.create_all()
             usuario1 = Usuario(nome = 'usuario1', saldo = 500.0)
             usuario2 = Usuario(nome = 'usuario2', saldo = 200.0)
-            validador1 = Validador(endereco = 'validador1', aposta = 200.0, key = 'key1')
-            validador2 = Validador(endereco = 'validador2', aposta = 100.0, key = 'key2')
+            validador1 = Validador(endereco = 'validador1', stake = 200.0, key = 'key1')
+            validador2 = Validador(endereco = 'validador2', stake = 100.0, key = 'key2')
             db.session.add_all([usuario1, usuario2, validador1, validador2])
             db.session.commit()
     
@@ -56,10 +56,13 @@ class teste_rotas(unittest.TestCase):
         }
         resposta = self.client.post('/trans', json = transacao_dados)
         self.assertEqual(resposta.status_code, 500)
-        self.assertIn('Erro na verificaçaõ da chave', resposta.json['mensagem'])
+        self.assertIn('Erro na verificação da chave', resposta.json['mensagem'])
 
     def teste_get_hora(self):
         resposta = self.client.post('/hora')
         self.assertEqual(resposta.status_code, 200)
         self.assertIn('tempo_atual', resposta.json)       
+
+if __name__ == '__main__':
+    unittest.main()
 

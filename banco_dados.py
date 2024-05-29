@@ -15,8 +15,8 @@ with app.app_context():
     db.session.add(usuario2)
 
     # Adiciona os validadores de exemplo
-    validador1 = Validador(endereco = 'validador1', aposta = 200.0, key = 'key1')
-    validador2 = Validador(endereco = 'validador2', aposta = 100.0, key = 'key2')
+    validador1 = Validador(endereco = 'validador1', stake = 200.0, key = 'key1')
+    validador2 = Validador(endereco = 'validador2', stake = 100.0, key = 'key2')
     db.session.add(validador1)
     db.session.add(validador2)
 

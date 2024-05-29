@@ -1,15 +1,16 @@
 from flask import Blueprint, request, jsonify
 import requests
+import traceback
 from datetime import datetime
 from .models import db, Usuario, Transacao, Validador
-from .validador import gerenciar_consenso
+from .validador import gerenciar_consenso, lista_validadores
 
 # Criar o blueprint para as rotas
 bp = Blueprint('routes', __name__)
 
 BASE_URL = 'http://127.0.0.1:5000'
 
-@bp.route('trans', methods=['POST'])
+@bp.route('/trans', methods=['POST'])
 def transacao():
     dados = request.json
     id_remetente = dados.get('id_remetente')
@@ -56,11 +57,33 @@ def transacao():
         else:
             return jsonify(resultado), resultado['status_code']
     except Exception as e:
+        traceback.print_exc() # Log de exceção
         return jsonify({'mensagem': str(e), 'status_code': 500}), 500
     
-@bp.route('/hora', methods = ['GET'])
+@bp.route('/hora', methods=['GET'])
 def get_tempo_atual():
     tempo_atual = datetime.utcnow
     return jsonify({'tempo_atual': tempo_atual.isoformat()}), 200
+
+@bp.route('/seletor/registrar', methods=['POST'])
+def registrar_validador():
+    dados = request.json
+    endereco = dados.get('endereco')
+    stake = dados.get('stake')
+    key = dados.get('key')
+    resultado = registrar_validador(endereco, stake, key)
+    return jsonify(resultado), resultado['staus_code']
+
+@bp.route('/seletor/remover', methods=['POST'])
+def remover_validador():
+    dados = request.json
+    endereco = dados.get('endereco')
+    resultado = remover_validador(endereco)
+    return jsonify(resultado), resultado['staus_code']
+
+@bp.route('/seletor/listar', methods=['GET'])
+def listar_validadores():
+    resultado = lista_validadores()
+    return jsonify(resultado[0]), resultado[1]
 
 
