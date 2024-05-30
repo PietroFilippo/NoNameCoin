@@ -121,14 +121,56 @@ def hold_validador_(endereco):
     db.session.commit()
     return {'mensagem': f'Validador de endereço {endereco} está on hold', 'status_code': 200}
 
-def registrar_validador_():
-    #to do
-    return
+def registrar_validador_(endereco, stake, key):
+    # Verifica se já está cadastrado
+    validador_existente = Validador.query.filter_by(endereco=endereco).first()
+    if validador_existente:
+        return {'mensagem': f'Validador de endereço {endereco} já existe', 'status_code': 400}
+    
+    # Registra novo validador
+    novo_validador = Validador(endereco=endereco, stake=stake, key=key)
+    db.session.add(novo_validador)
+    db.session.commit()
 
-def remover_validador_():
-    #to do
-    return
+    return {'mensagem': f'Validador de endereço {endereco} foi registrado', 'status_code': 200}
 
-def validar_transacao():
-    #to do
-    return
+def remover_validador_(endereco):
+    # Verifica se já está cadastrado
+    validador_existente = Validador.query.filter_by(endereco=endereco).first()
+    if validador_existente:
+        return {'mensagem': f'Validador de endereço {endereco} já existe', 'status_code': 400}
+
+    # Remove validador
+    db.session.delete(validador_existente)
+    db.session.commit()
+
+    return {'mensagem': f'Validador de endereço {endereco} foi removido', 'status_code': 400}
+
+
+def validar_transacao(id_transacao):
+    transacao = db.session.get(Transacao, id_transacao)
+    validadores_selecionados = selecionar_validadores()
+    if not validadores_selecionados:
+        return {'mensagem': 'Sem validadores disponiveis' , 'status_code': 503}
+    
+    # Simula validação para os validadores
+    aprovacoes = 0
+    rejeicoes = 0
+    for validador in validadores_selecionados:
+        if transacao.key != validador.key: # Adiciona verificação da chave
+            rejeicoes += 1
+        elif logica_validacao(validador, transacao):
+            aprovacoes += 1
+        else:
+            rejeicoes += 1
+
+    if aprovacoes > len(validadores_selecionados) // 2:
+        transacao.status = 1 # Concluida
+    else:
+        transacao.status = 2 # Não aprovada
+    db.session.commit()
+
+    if rejeicoes > 0:
+        return {'mensagem': 'Erro na validação', 'status_code': 500}
+    
+    return {'mensagem': 'Transação validada', 'status_code': 200}
