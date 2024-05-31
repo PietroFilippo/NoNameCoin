@@ -25,7 +25,7 @@ def selecionar_validadores():
         if random.random() < probabilidade:
             validadores_selecionados.append(validador)
             validador.selecoes_consecutivas += 1
-            if len(validadores_selecionados) ==3:
+            if len(validadores_selecionados) == 3:
                 break
     
     for validador in validadores:
@@ -54,7 +54,7 @@ def logica_validacao(validador, transacao):
         return False
     
     # Verifica se a transação é posterior a última transação
-    ultima_transacao = Transacao.query.filter_by(sender_id = transacao.id_remetente).order_by(Transacao.horario.desc()).first()
+    ultima_transacao = Transacao.query.filter_by(id_remetente = transacao.id_remetente).order_by(Transacao.horario.desc()).first()
     if ultima_transacao and transacao.horario < ultima_transacao.horario:
         print(f"Validação falhou: horário da transação {transacao.horario} foi feita antes da última transação {ultima_transacao.horario}")
         return False
@@ -70,6 +70,8 @@ def logica_validacao(validador, transacao):
     if transacao.key != validador.key:
         print(f"Validação falhou: erro na validação na chave {validador.endereco}")
         return False
+    
+    return True
     
 def gerenciar_consenso(transacao):
     validadores = selecionar_validadores()
@@ -137,15 +139,14 @@ def registrar_validador_(endereco, stake, key):
 def remover_validador_(endereco):
     # Verifica se já está cadastrado
     validador_existente = Validador.query.filter_by(endereco=endereco).first()
-    if validador_existente:
-        return {'mensagem': f'Validador de endereço {endereco} já existe', 'status_code': 400}
+    if not validador_existente:
+        return {'mensagem': f'Validador de endereço {endereco} já existe', 'status_code': 404}
 
     # Remove validador
     db.session.delete(validador_existente)
     db.session.commit()
 
-    return {'mensagem': f'Validador de endereço {endereco} foi removido', 'status_code': 400}
-
+    return {'mensagem': f'Validador de endereço {endereco} foi removido', 'status_code': 200}
 
 def validar_transacao(id_transacao):
     transacao = db.session.get(Transacao, id_transacao)

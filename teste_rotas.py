@@ -23,9 +23,9 @@ class teste_rotas(unittest.TestCase):
             'id_remetente': 1,
             'id_receptor': 2,
             'quantia': 20.0,
-            'key': 'key1'
+            'key': 'key2'
         }
-        resposta = self.client.post('/trans', json = transacao_dados)
+        resposta = self.client.post('/trans', json=transacao_dados)
         self.assertEqual(resposta.status_code, 200)
         self.assertIn('Transação feita com sucesso', resposta.json['mensagem'])
 
@@ -59,9 +59,42 @@ class teste_rotas(unittest.TestCase):
         self.assertIn('Erro na verificação da chave', resposta.json['mensagem'])
 
     def teste_get_hora(self):
-        resposta = self.client.post('/hora')
+        resposta = self.client.get('/hora')
         self.assertEqual(resposta.status_code, 200)
         self.assertIn('tempo_atual', resposta.json)       
+
+    def teste_registrar_validador(self):
+        dados = {
+            'endereco': 'validador3',
+            'stake': 150.0,
+            'key': 'key3'
+        }
+        resposta = self.client.post('/seletor/registrar', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Validador de endereço {dados["endereco"]} foi registrado', resposta.json['mensagem'])
+
+    def teste_remover_validador(self):
+        dados = {'endereco': 'validador3'}
+        resposta = self.client.post('/seletor/remover', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Validador de endereço {dados["endereco"]} foi removido', resposta.json['mensagem'])
+
+    def teste_listar_validadores(self):
+        resposta = self.client.get('/seletor/listar')
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue('validadores' in resposta.json)
+
+    def teste_flag_validador(self):
+        dados = {'endereco': 'validador1', 'acao': 'add'}
+        resposta = self.client.post('/seletor/flag', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Flag de validador atualizado', resposta.json['mensagem'])
+
+    def teste_hold_validador(self):
+        dados = {'endereco': 'validador1'}
+        resposta = self.client.post('/seletor/hold', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Validador de endereço {dados["endereco"]} está on hold', resposta.json['mensagem'])
 
 if __name__ == '__main__':
     unittest.main()
