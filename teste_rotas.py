@@ -13,9 +13,11 @@ class teste_rotas(unittest.TestCase):
             db.create_all()
             usuario1 = Usuario(nome = 'usuario1', saldo = 500.0)
             usuario2 = Usuario(nome = 'usuario2', saldo = 200.0)
+            usuario3 = Usuario(nome = 'usuario3', saldo = 700.0)
             validador1 = Validador(endereco = 'validador1', stake = 200.0, key = 'key1')
-            validador2 = Validador(endereco = 'validador2', stake = 100.0, key = 'key2')
-            db.session.add_all([usuario1, usuario2, validador1, validador2])
+            validador2 = Validador(endereco = 'validador2', stake = 250.0, key = 'key2')
+            validador3 = Validador(endereco = 'validador3', stake = 300.0, key = 'key3')
+            db.session.add_all([usuario1, usuario2, usuario3, validador1, validador2, validador3])
             db.session.commit()
     
     def teste_transacao(self):
@@ -65,9 +67,9 @@ class teste_rotas(unittest.TestCase):
 
     def teste_registrar_validador(self):
         dados = {
-            'endereco': 'validador3',
+            'endereco': 'validador4',
             'stake': 150.0,
-            'key': 'key3'
+            'key': 'key4'
         }
         resposta = self.client.post('/seletor/registrar', json=dados)
         self.assertEqual(resposta.status_code, 200)

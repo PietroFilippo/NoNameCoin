@@ -3,8 +3,8 @@ import random
 from datetime import datetime, timedelta
 
 def selecionar_validadores():
-    validadores = Validador.query.filter_by(status='ativo').all()
-    stake_total = sum(validador.stake for validador in validadores)
+    validadores = Validador.query.filter_by(status='ativo').all()  # Seleciona todos os validadores ativos
+    stake_total = sum(validador.stake for validador in validadores)  # Calcula o total de stake
     validadores_selecionados = []
 
     print(f"Validadores selecionados de {len(validadores)} disponiveis com stake total de {stake_total}")
@@ -13,24 +13,24 @@ def selecionar_validadores():
         return validadores_selecionados
     
     for validador in validadores:
-        probabilidade = validador.stake / stake_total
+        probabilidade = validador.stake / stake_total  # Calcula a probabilidade de seleção com base no stake
         if validador.flag == 1:
-            probabilidade *= 0.5
+            probabilidade *= 0.5  # Reduz a probabilidade se o validador tiver flag 1
         elif validador.flag == 2:
-            probabilidade *= 0.25
+            probabilidade *= 0.25  # Reduz mais ainda se tiver flag 2
 
         if validador.selecoes_consecutivas >= 5:
-            probabilidade = 0
+            probabilidade = 0  # Impede seleções consecutivas excessivas
 
         if random.random() < probabilidade:
             validadores_selecionados.append(validador)
-            validador.selecoes_consecutivas += 1
+            validador.selecoes_consecutivas += 1  # Incrementa o contador de seleções consecutivas
             if len(validadores_selecionados) == 3:
-                break
+                break  # Seleciona até 3 validadores
     
     for validador in validadores:
         if validador not in validadores_selecionados:
-            validador.selecoes_consecutivas = 0
+            validador.selecoes_consecutivas = 0  # Reseta o contador para validadores não selecionados
 
     db.session.commit()
 
@@ -73,27 +73,31 @@ def logica_validacao(validador, transacao):
     
     return True
     
-def gerenciar_consenso(transacao):
-    validadores = selecionar_validadores()
+def gerenciar_consenso(transacoes):
+    validadores = selecionar_validadores()  # Seleciona os validadores
     if not validadores:
-        print("Sem validadores disponiveis")
-        return {'mensagem': 'Sem validadores disponiveis', 'status_code': 503}
+        return {'mensagem': 'Sem validadores disponíveis', 'status_code': 503}
     
-    aprovacoes = 0
-    rejeicoes = 0
-    for validador in validadores:
-        if logica_validacao(validador, transacao):
-            aprovacoes += 1
-        else:
-            rejeicoes += 1
+    resultados = []
+    for transacao in transacoes:
+        if not isinstance(transacao, Transacao):
+            print(f"Objeto inválido encontrado na lista de transações: {transacao}")
+            continue
+    for transacao in transacoes:
+        aprovacoes = 0
+        rejeicoes = 0
+        for validador in validadores:
+            if logica_validacao(validador, transacao):  # Verifica se a transação é válida
+                aprovacoes += 1
+            else:
+                rejeicoes += 1
 
-    consenso = 1 if aprovacoes > len(validadores) // 2 else 2
-    transacao.status = consenso
-    db.session.commit()
+        consenso = 1 if aprovacoes > len(validadores) // 2 else 2  # Determina o consenso
+        transacao.status = consenso  # Atualiza o status da transação
+        db.session.commit()
+        #resultados.append({'id_transacao': transacao.id, 'consenso': consenso})
 
-    print(f"Transação {transacao.id}: aprovações = {aprovacoes}, rejeições = {rejeicoes}, consenso = {consenso}")
-
-    return {'consenso': consenso, 'status_code': 200}
+    return {'resultados': resultados, 'status_code': 200}
 
 def lista_validadores():
     validadores = Validador.query.all()
