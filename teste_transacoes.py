@@ -4,9 +4,22 @@ import string
 
 BASE_URL = 'http://127.0.0.1:5000'
 
+def obter_chaves_validadores():
+    response = requests.get(f'{BASE_URL}/seletor/listar')
+    if response.status_code == 200:
+        validadores = response.json().get('validadores', [])
+        return [validador['key'] for validador in validadores]
+    else:
+        print(f"Erro ao obter validadores: {response.text}")
+        return []
+
 def simular_transacoes(n):
-    chaves_validador = [''.join(random.choices(string.ascii_letters + string.digits, k=16)) for _ in range(n)]
+    chaves_validador = obter_chaves_validadores()
     
+    if not chaves_validador:
+        print("Nenhuma chave de validador disponível.")
+        return
+
     transacoes = []
     for _ in range(n):
         transacao = {
@@ -18,9 +31,11 @@ def simular_transacoes(n):
         transacoes.append(transacao)
     
     response = requests.post(f'{BASE_URL}/transacoes', json={'transacoes': transacoes})  # Envia as transações
-    print(response.json())
+    try:
+        print(response.json())
+    except Exception as e:
+        print(f"Erro ao decodificar a resposta JSON: {e}")
+        print(response.text)
 
 if __name__ == '__main__':
     simular_transacoes(100)  # Simula 100 transações
-
-# Arrumar atualização de saldos aspós as transaçãoes

@@ -16,8 +16,7 @@ class teste_rotas(unittest.TestCase):
             usuario3 = Usuario(nome = 'usuario3', saldo = 700.0)
             validador1 = Validador(endereco = 'validador1', stake = 200.0, key = 'key1')
             validador2 = Validador(endereco = 'validador2', stake = 250.0, key = 'key2')
-            validador3 = Validador(endereco = 'validador3', stake = 300.0, key = 'key3')
-            db.session.add_all([usuario1, usuario2, usuario3, validador1, validador2, validador3])
+            db.session.add_all([usuario1, usuario2, usuario3, validador1, validador2])
             db.session.commit()
     
     def teste_transacao(self):
@@ -76,7 +75,7 @@ class teste_rotas(unittest.TestCase):
         self.assertIn(f'Validador de endereço {dados["endereco"]} foi registrado', resposta.json['mensagem'])
 
     def teste_remover_validador(self):
-        dados = {'endereco': 'validador3'}
+        dados = {'endereco': 'validador4'}
         resposta = self.client.post('/seletor/remover', json=dados)
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(f'Validador de endereço {dados["endereco"]} foi removido', resposta.json['mensagem'])
@@ -85,6 +84,12 @@ class teste_rotas(unittest.TestCase):
         resposta = self.client.get('/seletor/listar')
         self.assertEqual(resposta.status_code, 200)
         self.assertTrue('validadores' in resposta.json)
+
+        # Imprime a lista de validadores no terminal
+        validadores = resposta.json['validadores']
+        print("\nLista de Validadores:")
+        for validador in validadores:
+            print(f"Endereço: {validador['endereco']}, Stake: {validador['stake']}, Key: {validador['key']}")
 
     def teste_flag_validador(self):
         dados = {'endereco': 'validador1', 'acao': 'add'}
@@ -100,4 +105,3 @@ class teste_rotas(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

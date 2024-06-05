@@ -73,30 +73,49 @@ def transacao():
     
 @bp.route('/transacoes', methods=['POST'])
 def transacoes():
-    dados = request.json
-    transacoes_dados = dados.get('transacoes')  # Obtém a lista de transações
+    dados = request.json.get('transacoes')
+    if not dados:
+        return jsonify({'mensagem': 'Nenhuma transação fornecida'}), 400
 
-    transacoes_objs = []
-    for transacao_dados in transacoes_dados:
-        id_remetente = transacao_dados.get('id_remetente')
-        id_receptor = transacao_dados.get('id_receptor')
-        quantia = transacao_dados.get('quantia')
-        key = transacao_dados.get('key')
+    respostas = []
 
-        remetente = db.session.get(Usuario, id_remetente)
-        if remetente.saldo < quantia:
-            continue  # Ignora transações com saldo insuficiente
+    try:
+        for transacao_dados in dados:
+            id_remetente = transacao_dados.get('id_remetente')
+            id_receptor = transacao_dados.get('id_receptor')
+            quantia = transacao_dados.get('quantia')
+            key = transacao_dados.get('key')
 
-        nova_transacao = Transacao(
-            id_remetente=id_remetente, id_receptor=id_receptor, quantia=quantia, status=0, key=key
-        )
-        transacoes_objs.append(nova_transacao)  # Adiciona a nova transação à lista
+            remetente = db.session.get(Usuario, id_remetente)
+            receptor = db.session.get(Usuario, id_receptor)
+            validador = Validador.query.filter_by(key=key).first()
 
-    db.session.add_all(transacoes_objs)  # Adiciona todas as transações ao banco de dados
-    db.session.commit()
+            if not validador:
+                respostas.append({'id_remetente': id_remetente, 'mensagem': 'Erro na verificação da chave'})
+                continue
 
-    resultado = gerenciar_consenso(transacoes_objs)  # Gerencia o consenso para todas as transações
-    return jsonify(resultado), resultado['status_code']
+            if remetente.saldo < quantia:
+                #respostas.append({'id_remetente': id_remetente, 'mensagem': 'Saldo insuficiente'})
+                continue
+
+            nova_transacao = Transacao(
+                id_remetente=id_remetente, id_receptor=id_receptor, quantia=quantia, status=0, key=key
+            )
+            db.session.add(nova_transacao)
+
+            # Atualiza os saldos dos usuários
+            remetente.saldo -= quantia
+            receptor.saldo += quantia
+
+            #respostas.append({'id_remetente': id_remetente, 'mensagem': 'Transação feita com sucesso'})
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'mensagem': 'Erro ao processar transações', 'erro': str(e)}), 500
+
+    return jsonify({'transacoes': respostas}), 200
     
 @bp.route('/hora', methods=['GET'])
 def get_tempo_atual():
@@ -121,8 +140,13 @@ def remover_validador():
 
 @bp.route('/seletor/listar', methods=['GET'])
 def listar_validadores():
-    resultado = lista_validadores()
-    return jsonify(resultado[0]), resultado[1]
+    validadores = Validador.query.all()
+    return jsonify({
+        'validadores': [
+            {'endereco': v.endereco, 'stake': v.stake, 'key': v.key}
+            for v in validadores
+        ]
+    }), 200
 
 # Rota pra aplicar flags aos validadores
 @bp.route('/seletor/flag', methods=['POST'])
@@ -139,4 +163,3 @@ def hold_validador():
     endereco = dados.get('endereco')
     resultado = hold_validador_(endereco)
     return jsonify(resultado), resultado['status_code']
-

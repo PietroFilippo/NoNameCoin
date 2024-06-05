@@ -95,7 +95,9 @@ def gerenciar_consenso(transacoes):
         consenso = 1 if aprovacoes > len(validadores) // 2 else 2  # Determina o consenso
         transacao.status = consenso  # Atualiza o status da transação
         db.session.commit()
-        #resultados.append({'id_transacao': transacao.id, 'consenso': consenso})
+        resultados.append({'id_transacao': transacao.id, 'status': 'validada'})
+    else:
+        resultados.append({'id_transacao': transacao.id, 'status': 'rejeitada'})
 
     return {'resultados': resultados, 'status_code': 200}
 
