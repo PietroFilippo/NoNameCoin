@@ -10,25 +10,26 @@ with app.app_context():
     db.drop_all()
     db.create_all()
 
-    # Adiciona 100 usuários de exemplo
-    for i in range(1, 101):
+    # Adiciona 10 usuários de exemplo
+    for i in range(1, 11):
         nome = ''.join(random.choices(string.ascii_lowercase, k=10))  # Gera um nome aleatório
         saldo = random.uniform(100.0, 1000.0)  # Gera um saldo aleatório entre 100 e 1000
         usuario = Usuario(nome=nome, saldo=saldo)
         db.session.add(usuario)
 
-    # Adiciona 100 validadores de exemplo
-    for i in range(1, 101):
+    # Adiciona validadores de exemplo
+    for i in range(1, 51):
         endereco = ''.join(random.choices(string.ascii_lowercase, k=10))  # Gera um endereço aleatório
         stake = random.uniform(100.0, 1000.0)  # Gera um stake aleatório entre 100 e 1000
         key = ''.join(random.choices(string.ascii_letters + string.digits, k=16))  # Gera uma chave aleatória
-        validador = Validador(endereco=endereco, stake=stake, key=key)
+        saldo_minimo = 50.0
+        validador = Validador(endereco=endereco, stake=stake, key=key, saldo_minimo=saldo_minimo)
         db.session.add(validador)
 
     db.session.commit()
 
     # Verifica a criação dos dados do banco
-    assert Usuario.query.count() == 100
-    assert Validador.query.count() == 100
+    assert Usuario.query.count() == 10
+    assert Validador.query.count() == 50
 
-    print("Banco de dados criado")
+    print("Banco de dados criado")  
