@@ -15,7 +15,7 @@ class Transacao(db.Model):
     quantia = db.Column(db.Float, nullable=False)
     status = db.Column(db.Integer, nullable=False)
     horario = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    key_validacao = db.Column(db.String(100), nullable=False)  # Nova coluna para armazenar a chave única de validação
+    key_validacao = db.Column(db.String(100), nullable=False)  # Coluna para armazenar a chave única de validação
 
 class Validador(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,4 +26,5 @@ class Validador(db.Model):
     status = db.Column(db.String(50), default='ativo')  # Status do validador
     selecoes_consecutivas = db.Column(db.Integer, default=0)  # Número de seleções consecutivas
     transacoes_coerentes = db.Column(db.Integer, default=0)  # Número de transações coerentes
+    transacoes_hold_restantes = db.Column(db.Integer, default=0)
     retorno_contagem = db.Column(db.Integer, default=0)  # Nova coluna para contagem de retornos

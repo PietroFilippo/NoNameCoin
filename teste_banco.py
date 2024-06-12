@@ -12,18 +12,17 @@ with app.app_context():
 
     # Adiciona 10 usuários de exemplo
     for i in range(1, 11):
-        nome = ''.join(random.choices(string.ascii_lowercase, k=10))  # Gera um nome aleatório
+        nome = ''.join(random.choices(string.ascii_lowercase, k=5))  # Gera um nome aleatório
         saldo = random.uniform(100.0, 1000.0)  # Gera um saldo aleatório entre 100 e 1000
         usuario = Usuario(nome=nome, saldo=saldo)
         db.session.add(usuario)
 
     # Adiciona validadores de exemplo
     for i in range(1, 51):
-        endereco = ''.join(random.choices(string.ascii_lowercase, k=10))  # Gera um endereço aleatório
+        endereco = ''.join(random.choices(string.ascii_lowercase, k=4))  # Gera um endereço aleatório
         stake = random.uniform(100.0, 1000.0)  # Gera um stake aleatório entre 100 e 1000
-        key = ''.join(random.choices(string.ascii_letters + string.digits, k=16))  # Gera uma chave aleatória
-        saldo_minimo = 50.0
-        validador = Validador(endereco=endereco, stake=stake, key=key, saldo_minimo=saldo_minimo)
+        key = ''.join(random.choices(string.ascii_letters + string.digits, k=3))  # Gera uma chave aleatória
+        validador = Validador(endereco=endereco, stake=stake, key=key)
         db.session.add(validador)
 
     db.session.commit()
