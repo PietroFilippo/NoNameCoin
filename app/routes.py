@@ -1,8 +1,8 @@
 from flask import Blueprint, current_app, request, jsonify
 import requests
 from datetime import datetime
-from .models import db, Usuario, Transacao, Validador
-from .validador import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, remover_validador_, selecionar_validadores, gerar_chave_validacao
+from .models import db, Usuario, Transacao, Validador, Seletor
+from .validador import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, generate_unique_key, lista_validadores, distribuir_taxas
 import logging
 
 # Configurar o logging
@@ -26,40 +26,48 @@ def transacao():
 
     for transacao in dados:
         try:
+            # Verificar e extrair dados da transação
+            id_remetente = transacao.get('id_remetente')
+            id_receptor = transacao.get('id_receptor')
+            quantia = transacao.get('quantia')
+
+            if not all([id_remetente, id_receptor, quantia]):
+                raise ValueError("Dados da transação incompletos")
+
             transacao_dados = {
-                'id_remetente': transacao.get('id_remetente'),
-                'id_receptor': transacao.get('id_receptor'),
-                'quantia': transacao.get('quantia')
+                'id_remetente': id_remetente,
+                'id_receptor': id_receptor,
+                'quantia': quantia
             }
 
             logger.debug(f"Dados antes da geração da chave de validação: {transacao_dados}")
 
-            # Verifica se os validadores já foram selecionados no contexto do aplicativo Flask
-            if 'validadores_selecionados' not in current_app.config:
+            # Verificar se os validadores já foram selecionados no contexto do aplicativo Flask
+            validadores_selecionados = current_app.config.get('validadores_selecionados')
+            if not validadores_selecionados:
                 validadores_selecionados = selecionar_validadores()
                 current_app.config['validadores_selecionados'] = validadores_selecionados
-            else:
-                validadores_selecionados = current_app.config['validadores_selecionados']
 
             logger.debug(f"Validadores selecionados: {[v.endereco for v in validadores_selecionados]}")
 
-            chave_validacao = gerar_chave_validacao(validadores_selecionados, transacao.get('id'))
-            transacao_dados['key_validacao'] = chave_validacao
-            logger.debug(f"Chave de validação a ser armazenada na transação: {chave_validacao}")
+            seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
+            chaves_validacao = [generate_unique_key(seletor_id, v.endereco) for v in validadores_selecionados]
+            transacao_dados['keys_validacao'] = chaves_validacao
+            logger.debug(f"Chaves de validação a serem armazenadas na transação: {chaves_validacao}")
 
+            # Criar e armazenar a nova transação
             nova_transacao = Transacao(
-                id=transacao.get('id'),
-                id_remetente=transacao_dados['id_remetente'],
-                id_receptor=transacao_dados['id_receptor'],
-                quantia=transacao_dados['quantia'],
+                id_remetente=id_remetente,
+                id_receptor=id_receptor,
+                quantia=quantia,
                 status=0,
-                key_validacao=chave_validacao
+                keys_validacao=",".join(chaves_validacao),
+                horario=datetime.utcnow()
             )
 
-            nova_transacao.horario = datetime.utcnow()
             db.session.add(nova_transacao)
             db.session.commit()
-            logger.debug("Chave de validação armazenada na transação com sucesso.")
+            logger.debug("Chaves de validação armazenadas na transação com sucesso.")
 
         except Exception as e:
             logger.error("Erro ao processar a transação", exc_info=True)
@@ -67,58 +75,60 @@ def transacao():
             continue
 
         try:
-            transacao_atual = Transacao.query.filter_by(id=transacao.get('id')).first()
+            transacao_atual = Transacao.query.get(nova_transacao.id)
             if not transacao_atual:
                 logger.error("Transação não encontrada no banco de dados")
                 resultados.append({'mensagem': 'Transação não encontrada', 'status_code': 404})
                 continue
 
-            remetente = db.session.get(Usuario, transacao_dados['id_remetente'])
-            taxa = transacao_dados['quantia'] * 0.015
-            if remetente.saldo < (transacao_dados['quantia'] + taxa):
-                logger.debug(f"Saldo insuficiente: {remetente.saldo} < {transacao_dados['quantia']} + {taxa}")
+            remetente = db.session.get(Usuario, id_remetente)
+            taxa = quantia * 0.015
+            if remetente.saldo < (quantia + taxa):
+                logger.debug(f"Saldo insuficiente: {remetente.saldo} < {quantia} + {taxa}")
                 transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
                 db.session.commit()
-                resultados.append({'mensagem': 'Saldo insuficiente', 'status_code': 400})
+                resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Saldo insuficiente', 'status': 'rejeitada'})
                 continue
 
             resposta_tempo_atual = requests.get(f'{BASE_URL}/hora')
             if resposta_tempo_atual.status_code != 200:
                 logger.error(f"Erro ao obter o tempo atual: {resposta_tempo_atual.status_code}")
-                resultados.append({'mensagem': 'Erro ao obter o tempo atual', 'status_code': 500})
+                resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Erro ao obter o tempo atual', 'status': 'rejeitada'})
                 continue
 
             tempo_atual = datetime.fromisoformat(resposta_tempo_atual.json()['tempo_atual'])
             logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
 
-            chave_fornecida = transacao.get('key_validacao')
-            chave_gerada = transacao_atual.key_validacao
-            logger.debug(f"Chave fornecida: {chave_fornecida}, Chave gerada: {chave_gerada}")
-            if chave_fornecida != chave_gerada:
-                logger.debug(f"Chave de validação inválida: {chave_fornecida}")
+            chave_fornecida = transacao.get('keys_validacao')
+            chaves_geradas = transacao_atual.keys_validacao.split(",")
+            if chave_fornecida not in chaves_geradas:
+                logger.debug(f"Chave de validação inválida: fornecida {chave_fornecida}")
                 transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
                 db.session.commit()
-                resultados.append({'mensagem': 'Chave de validação inválida', 'status_code': 500})
+                resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Chave de validação inválida', 'status': 'rejeitada'})
                 continue
 
-            resultado = gerenciar_consenso([transacao_atual], validadores_selecionados)
+            seletor = db.session.get(Seletor, seletor_id)
+            resultado = gerenciar_consenso([transacao_atual], validadores_selecionados, seletor)
             logger.debug(f"Resultado da validação do consenso: {resultado}")
 
             if resultado['status_code'] == 200:
                 if transacao_atual.status == 1:
                     logger.debug(f"Transação {transacao_atual.id} foi validada com sucesso")
-                    remetente.saldo -= transacao_dados['quantia']
-                    receptor = db.session.get(Usuario, transacao_dados['id_receptor'])
-                    receptor.saldo += transacao_dados['quantia']
+                    remetente.saldo -= quantia
+                    receptor = db.session.get(Usuario, id_receptor)
+                    receptor.saldo += quantia
                     db.session.commit()
                     logger.debug(f"Saldo atualizado do remetente: {remetente.saldo}")
                     logger.debug(f"Saldo atualizado do receptor: {receptor.saldo}")
-                    resultados.append({'mensagem': 'Transação feita com sucesso', 'status_code': 200})
+                    resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Transação feita com sucesso', 'status': 'sucesso'})
                 else:
+                    resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                     resultados.append(resultado)
             else:
                 transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
                 db.session.commit()
+                resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                 resultados.append(resultado)
 
         except Exception as e:
@@ -133,52 +143,52 @@ def get_tempo_atual():
     logger.debug(f"Tempo atual retornado: {tempo_atual}")
     return jsonify({'tempo_atual': tempo_atual.isoformat()}), 200
 
-@bp.route('/seletor/registrar', methods=['POST'])
+@bp.route('/validador/registrar', methods=['POST'])
 def registrar_validador():
     dados = request.json
     logger.debug(f"Dados recebidos para registrar validador: {dados}")
     endereco = dados.get('endereco')
     stake = dados.get('stake')
     key = dados.get('key')
-    resultado = registrar_validador_(endereco, stake, key)
+    seletor_id = dados.get('seletor_id')
+    resultado = registrar_validador_(endereco, stake, key, seletor_id)
     logger.debug(f"Resultado do registro do validador: {resultado}")
     return jsonify(resultado), resultado['status_code']
 
-@bp.route('/seletor/remover', methods=['POST'])
+@bp.route('/validador/expulsar', methods=['POST'])
 def remover_validador():
     dados = request.json
-    logger.debug(f"Dados recebidos para remover validador: {dados}")
+    logger.debug(f"Dados recebidos para expulsar validador: {dados}")
     endereco = dados.get('endereco')
-    resultado = remover_validador_(endereco)
-    logger.debug(f"Resultado da remoção do validador: {resultado}")
+    resultado = expulsar_validador_(endereco)
+    logger.debug(f"Resultado da expulsão do validador: {resultado}")
     return jsonify(resultado), resultado['status_code']
 
 @bp.route('/usuarios', methods=['GET'])
 def obter_usuarios():
     usuarios = Usuario.query.all()
     usuarios_list = [{'id': usuario.id, 'nome': usuario.nome, 'saldo': usuario.saldo} for usuario in usuarios]
-    #logger.debug(f"Usuários retornados: {usuarios_list}")
+    logger.debug(f"Usuários retornados: {usuarios_list}")
     return jsonify({'usuarios': usuarios_list})
 
-@bp.route('/seletor/listar', methods=['GET'])
+@bp.route('/validador/listar', methods=['GET'])
 def listar_validadores():
-    validadores = Validador.query.all()
-    validadores_list = [{'endereco': v.endereco, 'stake': v.stake, 'key': v.key} for v in validadores]
-    #logger.debug(f"Validadores retornados: {validadores_list}")
-    return jsonify({'validadores': validadores_list}), 200
+    resultado, status_code = lista_validadores()
+    logger.debug(f"Validadores retornados: {resultado}")
+    return jsonify(resultado), status_code
 
 # Rota pra aplicar flags aos validadores
-@bp.route('/seletor/flag', methods=['POST'])
+@bp.route('/validador/flag', methods=['POST'])
 def flag_validador():
     dados = request.json
     logger.debug(f"Dados recebidos para flag validador: {dados}")
     endereco = dados.get('endereco')
-    acao = dados.get('acao') # 'add' para adiconar flag e 'remover' para remover
+    acao = dados.get('acao') # 'add' para adicionar flag e 'remover' para remover
     resultado = update_flags_validador(endereco, acao)
     logger.debug(f"Resultado da atualização de flags: {resultado}")
     return jsonify(resultado), resultado['status_code']
 
-@bp.route('/seletor/hold', methods=['POST'])
+@bp.route('/validador/hold', methods=['POST'])
 def hold_validador():
     dados = request.json
     logger.debug(f"Dados recebidos para hold validador: {dados}")
