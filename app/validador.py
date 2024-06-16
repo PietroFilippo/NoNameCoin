@@ -67,8 +67,9 @@ def logica_validacao(validador, transacao):
     remetente = db.session.get(Usuario, transacao.id_remetente)
     tempo_atual = datetime.utcnow()
 
-    # Regra 1 - verifica se o remetente tem saldo suficiente para a transação
-    if remetente.saldo < transacao.quantia:
+    # Regra 1 - verifica se o remetente tem saldo suficiente para a transação acrescido das taxas
+    taxas = transacao.quantia * 0.015
+    if remetente.saldo < transacao.quantia + taxas:
         logger.debug(f"Validação falhou: remetente {remetente.id} não tem saldo suficiente")
         return False, "Saldo insuficiente"
 
@@ -140,7 +141,7 @@ def gerenciar_consenso(transacoes, validadores, seletor):
         distribuir_taxas(transacao, seletor)
 
         if consenso == 2 and validadores_maliciosos:  # Transação rejeitada e validadores maliciosos existem
-            validador_malicioso = random.choice(validadores_maliciosos)  # Escolhe um validador malicioso aleatoriamente
+            validador_malicioso = random.choice(validadores_maliciosos)
             update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG ao validador malicioso
 
         resultados.append({'id_transacao': transacao.id, 'status': 'validada' if consenso == 1 else 'rejeitada'})
@@ -241,7 +242,7 @@ def expulsar_validador_(endereco):
 
 def distribuir_taxas(transacao, seletor):
     taxa_total = transacao.quantia * 0.015
-    taxa_seletor = taxa_total * 1  # Ajustado para 1,5% do total da transação
+    taxa_seletor = taxa_total * 0.015  # Ajustado para 1,5% do total da transação
     taxa_validadores = transacao.quantia * 0.01  # Ajustado para 1% do total da transação
     taxa_travada = transacao.quantia * 0.005  # 0,5% do total da transação
 
