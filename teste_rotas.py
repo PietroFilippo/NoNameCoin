@@ -4,28 +4,34 @@ from datetime import datetime
 from flask import current_app
 from app import criar_app, db
 from app.models import Usuario, Validador, Seletor, Transacao
-from app.validador import generate_unique_key, selecionar_validadores, gerenciar_consenso
+from app.validador import gerar_chave, selecionar_validadores, gerenciar_consenso
 
+# Configuração do logger para depuração
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+# URL base para as requisições
 BASE_URL = 'http://127.0.0.1:5000'
 
 class TesteRotas(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Configura o app para testes
         cls.app = criar_app('app.config.TestesConfig')
         cls.app.testing = True
         cls.client = cls.app.test_client()
         with cls.app.app_context():
+            # Limpa e cria o banco de dados
             db.drop_all()
             db.create_all()
+            # Criação de alguns usuários e do seletor
             usuario1 = Usuario(nome='usuario1', saldo=600.0)
             usuario2 = Usuario(nome='usuario2', saldo=200.0)
-            seletor1 = Seletor(endereco='seletor1')
+            seletor1 = Seletor(endereco='seletor1', saldo=100.0)
             db.session.add(seletor1)
             db.session.commit()
             
+            # Criação de alguns validadores
             validador1 = Validador(endereco='validador1', stake=200.0, key='key1', chave_seletor='1-validador1', seletor_id=seletor1.id)
             validador2 = Validador(endereco='validador2', stake=350.0, key='key2', chave_seletor='1-validador2', seletor_id=seletor1.id)
             validador4 = Validador(endereco='validador4', stake=250.0, key='key4', chave_seletor='1-validador4', seletor_id=seletor1.id)
@@ -42,21 +48,21 @@ class TesteRotas(unittest.TestCase):
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
     
-            # Gerar chaves de validação para todos os validadores selecionados
+            # Gera as chaves de validação para todos os validadores selecionados
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chaves_validacao = [generate_unique_key(seletor_id, v.endereco) for v in validadores_selecionados]
+            chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
     
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
                 'quantia': 100.0,
-                'keys_validacao': chaves_validacao[0]  # Usar a chave esperada pelo primeiro validador
+                'keys_validacao': chaves_validacao[0]
             }
     
             resposta = self.client.post('/trans', json=transacao_dados)
-            print(resposta.json)  # Adicionado para inspecionar a resposta
+            print(resposta.json)
             self.assertEqual(resposta.status_code, 200)
-            self.assertIn('mensagem', resposta.json[0])  # Verifica se 'mensagem' está presente
+            self.assertIn('mensagem', resposta.json[0])
             self.assertIn('Transação feita com sucesso', resposta.json[0]['mensagem'])
     
     def test_multiplas_transacoes(self):
@@ -64,28 +70,27 @@ class TesteRotas(unittest.TestCase):
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
 
-            # Gerar chaves de validação para todos os validadores selecionados
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chaves_validacao_1 = [generate_unique_key(seletor_id, v.endereco) for v in validadores_selecionados]
-            chaves_validacao_2 = [generate_unique_key(seletor_id, v.endereco) for v in validadores_selecionados]
+            chaves_validacao_1 = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
+            chaves_validacao_2 = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
 
             transacoes_dados = [
                 {
                     'id_remetente': 1,
                     'id_receptor': 2,
                     'quantia': 50.0,
-                    'keys_validacao': chaves_validacao_1[0]  # Usar a chave esperada pelo primeiro validador
+                    'keys_validacao': chaves_validacao_1[0]
                 },
                 {
                     'id_remetente': 2,
                     'id_receptor': 1,
                     'quantia': 30.0,
-                    'keys_validacao': chaves_validacao_2[0]  # Usar a chave esperada pelo primeiro validador
+                    'keys_validacao': chaves_validacao_2[0]
                 }
             ]
 
             resposta = self.client.post('/trans', json=transacoes_dados)
-            print(resposta.json)  # Adicionado para inspecionar a resposta
+            print(resposta.json)
             self.assertEqual(resposta.status_code, 200)
             for resultado in resposta.json:
                 self.assertIn('mensagem', resultado) 
@@ -113,13 +118,13 @@ class TesteRotas(unittest.TestCase):
             current_app.config['validadores_selecionados'] = validadores_selecionados
 
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chave_validacao = generate_unique_key(seletor_id, validadores_selecionados[0].endereco)
+            chaves_validacao = gerar_chave(seletor_id, validadores_selecionados[0].endereco)
 
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
                 'quantia': 1000.0,
-                'keys_validacao': chave_validacao  # Usar a chave esperada pelo primeiro validador
+                'keys_validacao': chaves_validacao
             }
 
             resposta = self.client.post('/trans', json=transacao_dados)

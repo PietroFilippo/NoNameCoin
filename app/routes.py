@@ -1,32 +1,32 @@
 from flask import Blueprint, current_app, request, jsonify
 import requests
 from datetime import datetime
-from .models import db, Usuario, Transacao, Validador, Seletor
-from .validador import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, generate_unique_key, lista_validadores, distribuir_taxas
+from .models import db, Usuario, Transacao, Seletor
+from .validador import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, gerar_chave, lista_validadores
 import logging
 
-# Configurar o logging
+# Configura o logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Define o nível de log para o módulo routes.py
+logger.setLevel(logging.DEBUG)  # Define o nível de log
 
-# Criar o blueprint para as rotas
+# Cria o blueprint para as rotas
 bp = Blueprint('routes', __name__)
 
-BASE_URL = 'http://127.0.0.1:5000'
+BASE_URL = 'http://127.0.0.1:5000'  # URL base para as requisições internas
 
 @bp.route('/trans', methods=['POST'])
 def transacao():
-    dados = request.json
+    dados = request.json  # Obtém os dados JSON da requisição
     logger.debug(f"Dados recebidos para a transação: {dados}")
 
     if not isinstance(dados, list):
-        dados = [dados]  # Transforme um único objeto em uma lista para processamento uniforme
+        dados = [dados]  # Transforma um único objeto em uma lista para processamento uniforme
 
     resultados = []
 
     for transacao in dados:
         try:
-            # Verificar e extrair dados da transação
+            # Verifica e extrai os dados da transação
             id_remetente = transacao.get('id_remetente')
             id_receptor = transacao.get('id_receptor')
             quantia = transacao.get('quantia')
@@ -42,7 +42,7 @@ def transacao():
 
             logger.debug(f"Dados antes da geração da chave de validação: {transacao_dados}")
 
-            # Verificar se os validadores já foram selecionados no contexto do aplicativo Flask
+            # Verifica se os validadores já foram selecionados
             validadores_selecionados = current_app.config.get('validadores_selecionados')
             if not validadores_selecionados:
                 validadores_selecionados = selecionar_validadores()
@@ -50,12 +50,13 @@ def transacao():
 
             logger.debug(f"Validadores selecionados: {[v.endereco for v in validadores_selecionados]}")
 
+            # Gera as chaves de validação para a transação
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chaves_validacao = [generate_unique_key(seletor_id, v.endereco) for v in validadores_selecionados]
+            chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
             transacao_dados['keys_validacao'] = chaves_validacao
             logger.debug(f"Chaves de validação a serem armazenadas na transação: {chaves_validacao}")
 
-            # Criar e armazenar a nova transação
+            # Cria e armazena a nova transação no banco de dados
             nova_transacao = Transacao(
                 id_remetente=id_remetente,
                 id_receptor=id_receptor,
@@ -70,26 +71,30 @@ def transacao():
             logger.debug("Chaves de validação armazenadas na transação com sucesso.")
 
         except Exception as e:
+            # Lida com exceções durante a criação da transação
             logger.error("Erro ao processar a transação", exc_info=True)
             resultados.append({'mensagem': str(e), 'status_code': 500})
             continue
 
         try:
+            # Recupera a nova transação criada do banco de dados
             transacao_atual = Transacao.query.get(nova_transacao.id)
             if not transacao_atual:
                 logger.error("Transação não encontrada no banco de dados")
                 resultados.append({'mensagem': 'Transação não encontrada', 'status_code': 404})
                 continue
 
+            # Verifica o saldo do remetente
             remetente = db.session.get(Usuario, id_remetente)
             taxa = quantia * 0.015
             if remetente.saldo < (quantia + taxa):
                 logger.debug(f"Saldo insuficiente: {remetente.saldo} < {quantia} + {taxa}")
-                transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
+                transacao_atual.status = 2  # Status 2 = transação rejeitada
                 db.session.commit()
                 resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Saldo insuficiente', 'status': 'rejeitada'})
                 continue
 
+            # Obtém o tempo atual
             resposta_tempo_atual = requests.get(f'{BASE_URL}/hora')
             if resposta_tempo_atual.status_code != 200:
                 logger.error(f"Erro ao obter o tempo atual: {resposta_tempo_atual.status_code}")
@@ -99,21 +104,24 @@ def transacao():
             tempo_atual = datetime.fromisoformat(resposta_tempo_atual.json()['tempo_atual'])
             logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
 
+            # Verifica a chave de validação fornecida
             chave_fornecida = transacao.get('keys_validacao')
             chaves_geradas = transacao_atual.keys_validacao.split(",")
             if chave_fornecida not in chaves_geradas:
                 logger.debug(f"Chave de validação inválida: fornecida {chave_fornecida}")
-                transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
+                transacao_atual.status = 2  # Status 2 = transação rejeitada
                 db.session.commit()
                 resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Chave de validação inválida', 'status': 'rejeitada'})
                 continue
 
+            # Gerencia o consenso dos validadores para a transação
             seletor = db.session.get(Seletor, seletor_id)
             resultado = gerenciar_consenso([transacao_atual], validadores_selecionados, seletor)
             logger.debug(f"Resultado da validação do consenso: {resultado}")
 
             if resultado['status_code'] == 200:
                 if transacao_atual.status == 1:
+                    # Se a transação é validada com sucesso, atualiza os saldos
                     logger.debug(f"Transação {transacao_atual.id} foi validada com sucesso")
                     remetente.saldo -= quantia
                     receptor = db.session.get(Usuario, id_receptor)
@@ -126,25 +134,29 @@ def transacao():
                     resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                     resultados.append(resultado)
             else:
-                transacao_atual.status = 2  # status 2 significa que a transação foi rejeitada
+                # Se a transação é rejeitada pelo consenso dos validadores
+                transacao_atual.status = 2  # Status 2 = transação rejeitada
                 db.session.commit()
                 resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                 resultados.append(resultado)
 
         except Exception as e:
+            # Lida com exceções
             logger.error("Erro ao processar a transação", exc_info=True)
             resultados.append({'mensagem': str(e), 'status_code': 500})
 
-    return jsonify(resultados), 200
+    return jsonify(resultados), 200  # Retorna os resultados das transações processadas
 
 @bp.route('/hora', methods=['GET'])
 def get_tempo_atual():
+    # Obtém o tempo atual do servidor
     tempo_atual = datetime.utcnow()
     logger.debug(f"Tempo atual retornado: {tempo_atual}")
     return jsonify({'tempo_atual': tempo_atual.isoformat()}), 200
 
 @bp.route('/validador/registrar', methods=['POST'])
 def registrar_validador():
+    # Registra um novo validador
     dados = request.json
     logger.debug(f"Dados recebidos para registrar validador: {dados}")
     endereco = dados.get('endereco')
@@ -157,6 +169,7 @@ def registrar_validador():
 
 @bp.route('/validador/expulsar', methods=['POST'])
 def remover_validador():
+    # Expulsa um validador
     dados = request.json
     logger.debug(f"Dados recebidos para expulsar validador: {dados}")
     endereco = dados.get('endereco')
@@ -166,6 +179,7 @@ def remover_validador():
 
 @bp.route('/usuarios', methods=['GET'])
 def obter_usuarios():
+    # Obtém a lista de usuários
     usuarios = Usuario.query.all()
     usuarios_list = [{'id': usuario.id, 'nome': usuario.nome, 'saldo': usuario.saldo} for usuario in usuarios]
     logger.debug(f"Usuários retornados: {usuarios_list}")
@@ -173,13 +187,14 @@ def obter_usuarios():
 
 @bp.route('/validador/listar', methods=['GET'])
 def listar_validadores():
+    # Lista todos os validadores
     resultado, status_code = lista_validadores()
     logger.debug(f"Validadores retornados: {resultado}")
     return jsonify(resultado), status_code
 
-# Rota pra aplicar flags aos validadores
 @bp.route('/validador/flag', methods=['POST'])
 def flag_validador():
+    # Adicionr ou remove flags de validadores
     dados = request.json
     logger.debug(f"Dados recebidos para flag validador: {dados}")
     endereco = dados.get('endereco')
@@ -190,6 +205,7 @@ def flag_validador():
 
 @bp.route('/validador/hold', methods=['POST'])
 def hold_validador():
+    # Coloca o validador em hold
     dados = request.json
     logger.debug(f"Dados recebidos para hold validador: {dados}")
     endereco = dados.get('endereco')
