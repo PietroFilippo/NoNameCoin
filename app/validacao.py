@@ -251,13 +251,45 @@ def expulsar_validador_(endereco):
         return {"mensagem": f"Validador de endereço {endereco} foi expulso", "status_code": 200}
     else:
         return {"mensagem": "Validador não encontrado", "status_code": 404}
+    
+def remover_validador_(endereco):
+    # Remove um validador do banco de dados
+    validador = Validador.query.filter_by(endereco=endereco).first()
+    if validador:
+        db.session.delete(validador)
+        db.session.commit()
+        return {"mensagem": f"Validador de endereço {endereco} foi removido do banco de dados", "status_code": 200}
+    else:
+        return {"mensagem": "Validador não encontrado", "status_code": 404}
+    
+def registrar_seletor_(nome, endereco, saldo):
+    # Registra um novo seletor
+    seletor_existente = Seletor.query.filter_by(endereco=endereco).first()
+    if seletor_existente:
+        return {'mensagem': f'Seletor de endereço {endereco} já existe', 'status_code': 400}
+
+    novo_seletor = Seletor(nome=nome, endereco=endereco, saldo=saldo)
+    db.session.add(novo_seletor)
+    db.session.commit()
+
+    return {'mensagem': f'Seletor de endereço {endereco} foi registrado', 'status_code': 200}
+
+def remover_seletor_(endereco):
+    # Remove um seletor do banco de dados
+    seletor = Seletor.query.filter_by(endereco=endereco).first()
+    if seletor:
+        db.session.delete(seletor)
+        db.session.commit()
+        return {"mensagem": f"Seletor de endereço {endereco} foi removido do banco de dados", "status_code": 200}
+    else:
+        return {"mensagem": "Seletor não encontrado", "status_code": 404}
 
 def distribuir_taxas(transacao, seletor):
     # Distribui as taxas de uma transação entre o seletor e os validadores
-    taxa_total = transacao.quantia * 0.015
-    taxa_seletor = taxa_total * 0.015  # 1,5% do total da transação
-    taxa_validadores = transacao.quantia * 0.01  #  1% do total da transação
-    taxa_travada = transacao.quantia * 0.005  # 0,5% do total da transação
+    quantia_transacionada = transacao.quantia
+    taxa_seletor = quantia_transacionada * 0.015  # 1,5% da quantia transacionada
+    taxa_validadores = quantia_transacionada * 0.01  # 1% da quantia transacionada
+    taxa_travada = quantia_transacionada * 0.005  # 0,5% da quantia transacionada
 
     validadores = selecionar_validadores()
     if not validadores:

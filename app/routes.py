@@ -2,7 +2,8 @@ from flask import Blueprint, current_app, request, jsonify
 import requests
 from datetime import datetime
 from .models import db, Usuario, Transacao, Seletor
-from .validador import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, gerar_chave, lista_validadores
+from .validacao import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, \
+    gerar_chave, lista_validadores, remover_validador_, registrar_seletor_, remover_seletor_
 import logging
 
 # Configura o logger
@@ -168,13 +169,21 @@ def registrar_validador():
     return jsonify(resultado), resultado['status_code']
 
 @bp.route('/validador/expulsar', methods=['POST'])
-def remover_validador():
+def expulsar_validador():
     # Expulsa um validador
     dados = request.json
     logger.debug(f"Dados recebidos para expulsar validador: {dados}")
     endereco = dados.get('endereco')
     resultado = expulsar_validador_(endereco)
     logger.debug(f"Resultado da expulsão do validador: {resultado}")
+    return jsonify(resultado), resultado['status_code']
+
+@bp.route('/validador/remover', methods=['POST'])
+def remover_validador():
+    # Remove um validador
+    dados = request.get_json()
+    endereco = dados.get('endereco')
+    resultado = remover_validador_(endereco)
     return jsonify(resultado), resultado['status_code']
 
 @bp.route('/usuarios', methods=['GET'])
@@ -211,4 +220,22 @@ def hold_validador():
     endereco = dados.get('endereco')
     resultado = hold_validador_(endereco)
     logger.debug(f"Resultado do hold do validador: {resultado}")
+    return jsonify(resultado), resultado['status_code']
+
+# Rota para registrar um novo seletor
+@bp.route('/seletor/registrar', methods=['POST'])
+def registrar_seletor():
+    dados = request.get_json()
+    nome = dados.get('nome')
+    endereco = dados.get('endereco')
+    saldo = dados.get('saldo')
+    resultado = registrar_seletor_(nome, endereco, saldo)
+    return jsonify(resultado), resultado['status_code']
+
+# Rota para remover um seletor
+@bp.route('/seletor/remover', methods=['POST'])
+def remover_seletor():
+    dados = request.get_json()
+    endereco = dados.get('endereco')
+    resultado = remover_seletor_(endereco)
     return jsonify(resultado), resultado['status_code']

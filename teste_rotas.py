@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import current_app
 from app import criar_app, db
 from app.models import Usuario, Validador, Seletor, Transacao
-from app.validador import gerar_chave, selecionar_validadores, gerenciar_consenso
+from app.validacao import gerar_chave, selecionar_validadores, gerenciar_consenso
 
 # Configuração do logger para depuração
 logger = logging.getLogger(__name__)
@@ -40,7 +40,8 @@ class TesteRotas(unittest.TestCase):
             validador7 = Validador(endereco='validador7', stake=250.0, key='key7', chave_seletor='1-validador7', seletor_id=seletor1.id, status='on_hold')
             validador8 = Validador(endereco='validador8', stake=150.0, key='key8', chave_seletor='1-validador8', seletor_id=seletor1.id, status='expulso')
             validador9 = Validador(endereco='validador9', stake=100.0, key='key9', chave_seletor='1-validador9', seletor_id=seletor1.id)
-            db.session.add_all([usuario1, usuario2, validador1, validador2, validador4, validador5, validador6, validador7, validador8, validador9])
+            validador10 = Validador(endereco='validador10', stake=100.0, key='key10', chave_seletor='1-validador10', seletor_id=seletor1.id)
+            db.session.add_all([usuario1, usuario2, validador1, validador2, validador4, validador5, validador6, validador7, validador8, validador9, validador10])
             db.session.commit()
 
     def test_transacao_bem_sucedida(self):
@@ -164,6 +165,12 @@ class TesteRotas(unittest.TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(f'Validador de endereço {dados["endereco"]} foi expulso', resposta.json['mensagem'])
 
+    def teste_remover_validador(self):
+        dados = {'endereco': 'validador10'}
+        resposta = self.client.post('/validador/remover', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Validador de endereço {dados["endereco"]} foi removido', resposta.json['mensagem'])
+        
     def teste_listar_validadores(self):
         resposta = self.client.get('/validador/listar')
         print(resposta.json) 
