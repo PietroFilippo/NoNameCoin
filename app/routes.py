@@ -2,18 +2,20 @@ from flask import Blueprint, current_app, request, jsonify
 import requests
 from datetime import datetime
 from .models import db, Usuario, Transacao, Seletor
-from .validacao import gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, selecionar_validadores, \
-    gerar_chave, lista_validadores, remover_validador_, registrar_seletor_, remover_seletor_
+from .validacao import (
+    gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, 
+    selecionar_validadores, gerar_chave, lista_validadores, remover_validador_, registrar_seletor_, remover_seletor_
+)
 import logging
 
 # Configura o logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Define o nível de log
+logger.setLevel(logging.DEBUG) # Define o nível de log
 
 # Cria o blueprint para as rotas
 bp = Blueprint('routes', __name__)
 
-BASE_URL = 'http://127.0.0.1:5000'  # URL base para as requisições internas
+BASE_URL = 'http://127.0.0.1:5000' # URL base para as requisições internas
 
 @bp.route('/trans', methods=['POST'])
 def transacao():
@@ -31,8 +33,9 @@ def transacao():
             id_remetente = transacao.get('id_remetente')
             id_receptor = transacao.get('id_receptor')
             quantia = transacao.get('quantia')
+            chave_fornecida = transacao.get('keys_validacao')  # Obtém a chave de validação fornecida
 
-            if not all([id_remetente, id_receptor, quantia]):
+            if not all([id_remetente, id_receptor, quantia, chave_fornecida]):
                 raise ValueError("Dados da transação incompletos")
 
             transacao_dados = {
@@ -106,7 +109,6 @@ def transacao():
             logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
 
             # Verifica a chave de validação fornecida
-            chave_fornecida = transacao.get('keys_validacao')
             chaves_geradas = transacao_atual.keys_validacao.split(",")
             if chave_fornecida not in chaves_geradas:
                 logger.debug(f"Chave de validação inválida: fornecida {chave_fornecida}")
@@ -203,11 +205,11 @@ def listar_validadores():
 
 @bp.route('/validador/flag', methods=['POST'])
 def flag_validador():
-    # Adicionr ou remove flags de validadores
+    # Adiciona ou remove flags de validadores
     dados = request.json
     logger.debug(f"Dados recebidos para flag validador: {dados}")
     endereco = dados.get('endereco')
-    acao = dados.get('acao') # 'add' para adicionar flag e 'remover' para remover
+    acao = dados.get('acao')  # 'add' para adicionar flag e 'remover' para remover
     resultado = update_flags_validador(endereco, acao)
     logger.debug(f"Resultado da atualização de flags: {resultado}")
     return jsonify(resultado), resultado['status_code']

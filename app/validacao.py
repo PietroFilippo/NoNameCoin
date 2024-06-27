@@ -133,26 +133,30 @@ def gerenciar_consenso(transacoes, validadores, seletor):
             if valido:
                 aprovacoes += 1
                 validador.transacoes_coerentes += 1
+                logger.debug(f"Validador {validador.id} - Depois do incremento: {validador.transacoes_coerentes}")
             else:
                 rejeicoes += 1
                 validadores_maliciosos.append(validador)
 
             remover_flag_validador(validador)  # Remove flags do validador
+            db.session.commit()  # Commit dentro do loop para persistir cada alteração
 
         logger.debug(f"Transação {transacao.id}: Aprovado por {aprovacoes} validadores, Rejeitado por {rejeicoes} validadores")
 
         consenso = 1 if aprovacoes > len(validadores) // 2 else 2
         transacao.status = consenso
-        db.session.commit()
+        db.session.commit()  # Commit das alterações na transação
+
         distribuir_taxas(transacao, seletor)  # Distribui as taxas
 
-        if consenso == 2 and validadores_maliciosos:  # Transação rejeitada para validadores maliciosos
+        if consenso == 1 and validadores_maliciosos:  # Transação rejeitada para validadores maliciosos
             validador_malicioso = random.choice(validadores_maliciosos)
             update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG ao validador malicioso
 
         resultados.append({'id_transacao': transacao.id, 'status': 'validada' if consenso == 1 else 'rejeitada'})
 
     status_code = 200 if all(transacao.status == 1 for transacao in transacoes) else 500
+    db.session.commit()  # Commit final após processar todas as transações
     return {'resultados': resultados, 'status_code': status_code}
 
 def lista_validadores():
