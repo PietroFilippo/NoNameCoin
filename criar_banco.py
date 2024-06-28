@@ -14,7 +14,7 @@ def limpar_banco_de_dados():
 
 def criar_e_popular_banco():
     with app.app_context():
-        # Verifica se o banco de dados já existe (opcional)
+        # Verifica se o banco de dados já existe
         if db.engine.url.database not in ('', ':memory:'):
             print(f"Banco de dados '{db.engine.url.database}' já existe. Limpando e recriando.")
             limpar_banco_de_dados()
@@ -22,10 +22,10 @@ def criar_e_popular_banco():
         # Cria todas as tabelas
         db.create_all()
 
-        # Cria usuários aleatórios
-        for i in range(10):
+        # Cria usuários aleatórios a partir do indice 1
+        for i in range(1, 31):
             usuario = Usuario(
-                nome=f'Usuario {i}',
+                nome=f'usuario{i}',
                 saldo=random.uniform(1000, 5000)
             )
             db.session.add(usuario)
@@ -36,10 +36,10 @@ def criar_e_popular_banco():
             saldo=random.uniform(10000, 50000)
         )
         db.session.add(seletor)
-        db.session.commit()  # Confirma para obter o ID do seletor
+        db.session.commit() 
 
-        # Cria validadores aleatórios associados ao seletor criado
-        for i in range(3):
+        # Cria validadores aleatórios associados ao seletor a partir do indice 1
+        for i in range(1, 61):
             chave_validador = gerar_chave(seletor.id, f'validador{i}')
             validador = Validador(
                 endereco=f'validador{i}',

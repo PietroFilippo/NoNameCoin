@@ -20,7 +20,7 @@ BASE_URL = 'http://127.0.0.1:5000' # URL base para as requisições internas
 @bp.route('/trans', methods=['POST'])
 def transacao():
     dados = request.json  # Obtém os dados JSON da requisição
-    logger.debug(f"Dados recebidos para a transação: {dados}")
+    #logger.debug(f"Dados recebidos para a transação: {dados}")
 
     if not isinstance(dados, list):
         dados = [dados]  # Transforma um único objeto em uma lista para processamento uniforme
@@ -44,7 +44,7 @@ def transacao():
                 'quantia': quantia
             }
 
-            logger.debug(f"Dados antes da geração da chave de validação: {transacao_dados}")
+            #logger.debug(f"Dados antes da geração da chave de validação: {transacao_dados}")
 
             # Verifica se os validadores já foram selecionados
             validadores_selecionados = current_app.config.get('validadores_selecionados')
@@ -72,7 +72,7 @@ def transacao():
 
             db.session.add(nova_transacao)
             db.session.commit()
-            logger.debug("Chaves de validação armazenadas na transação com sucesso.")
+            #logger.debug("Chaves de validação armazenadas na transação com sucesso.")
 
         except Exception as e:
             # Lida com exceções durante a criação da transação
@@ -106,7 +106,7 @@ def transacao():
                 continue
 
             tempo_atual = datetime.fromisoformat(resposta_tempo_atual.json()['tempo_atual'])
-            logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
+            #logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
 
             # Verifica a chave de validação fornecida
             chaves_geradas = transacao_atual.keys_validacao.split(",")
@@ -125,7 +125,7 @@ def transacao():
             if resultado['status_code'] == 200:
                 if transacao_atual.status == 1:
                     # Se a transação é validada com sucesso, atualiza os saldos
-                    logger.debug(f"Transação {transacao_atual.id} foi validada com sucesso")
+                    #logger.debug(f"Transação {transacao_atual.id} foi validada com sucesso")
                     remetente.saldo -= quantia
                     receptor = db.session.get(Usuario, id_receptor)
                     receptor.saldo += quantia

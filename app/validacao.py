@@ -63,14 +63,24 @@ def selecionar_validadores():
     db.session.commit()
 
     chaves_validadores = [validador.key for validador in validadores_selecionados]
-    logger.debug(f"Chaves dos validadores selecionados: {chaves_validadores}")
+    #logger.debug(f"Chaves dos validadores selecionados: {chaves_validadores}")
 
     return validadores_selecionados
 
 def logica_validacao(validador, transacao):
-    # Verifica a lógica de validação da transação
     remetente = db.session.get(Usuario, transacao.id_remetente)
     tempo_atual = datetime.utcnow()
+
+    # Verifica se o remetente está bloqueado
+    if remetente.tempo_bloqueio:
+        if remetente.tempo_bloqueio > tempo_atual:
+            logger.debug(f"Validação falhou: remetente {remetente.id} está bloqueado até {remetente.tempo_bloqueio}")
+            return False, "Remetente bloqueado"
+        else:
+            # Remove o bloqueio se o tempo de bloqueio tiver expirado
+            remetente.tempo_bloqueio = None
+            db.session.commit()
+            logger.debug(f"Remetente {remetente.id} não está mais bloqueado")
 
     # Verifica se o remetente tem saldo suficiente para a transação acrescido das taxas
     taxas = transacao.quantia * 0.015
@@ -83,18 +93,20 @@ def logica_validacao(validador, transacao):
         logger.debug(f"Validação falhou: horário da transação está incorreto {transacao.horario}")
         return False, "Horário incorreto"
 
-    # Verifica se a transação é posterior a última transação
+    # Verifica se a transação é posterior à última transação
     ultima_transacao = Transacao.query.filter_by(id_remetente=transacao.id_remetente).order_by(Transacao.horario.desc()).first()
     if ultima_transacao and transacao.horario < ultima_transacao.horario:
         logger.debug(f"Validação falhou: horário da transação {transacao.horario} foi feita antes da última transação {ultima_transacao.horario}")
-        return False, "Transação anterior a última"
+        return False, "Transação anterior à última"
 
     # Verifica o número de transações feitas em 1 minuto
-    um_minuto = datetime.utcnow() - timedelta(minutes=1)
+    um_minuto = tempo_atual - timedelta(minutes=1)
     num_transacoes = Transacao.query.filter(Transacao.id_remetente == transacao.id_remetente, Transacao.horario > um_minuto).count()
     if num_transacoes >= 100:
-        logger.debug(f"Validação falhou: mais de 100 transações foram feitas no último minuto")
-        return False, "Número de transações excedido"
+        remetente.tempo_bloqueio = tempo_atual + timedelta(minutes=1)
+        db.session.commit()
+        logger.debug(f"Validação falhou: remetente {remetente.id} fez mais de 100 transações no último minuto e está bloqueado até {remetente.tempo_bloqueio}")
+        return False, "Número de transações excedido, remetente bloqueado"
 
     # Verifica a chave de validação
     chaves_validacao = transacao.keys_validacao.split(",")
@@ -133,7 +145,7 @@ def gerenciar_consenso(transacoes, validadores, seletor):
             if valido:
                 aprovacoes += 1
                 validador.transacoes_coerentes += 1
-                logger.debug(f"Validador {validador.id} - Depois do incremento: {validador.transacoes_coerentes}")
+                #logger.debug(f"Validador {validador.id} - Depois do incremento: {validador.transacoes_coerentes}")
             else:
                 rejeicoes += 1
                 validadores_maliciosos.append(validador)
