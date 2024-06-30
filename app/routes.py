@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 from .models import db, Usuario, Transacao, Seletor
 from .validacao import (
-    gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, 
+    distribuir_taxas, gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, 
     selecionar_validadores, gerar_chave, lista_validadores, remover_validador_, registrar_seletor_, remover_seletor_
 )
 import logging
@@ -20,7 +20,6 @@ BASE_URL = 'http://127.0.0.1:5000' # URL base para as requisições internas
 @bp.route('/trans', methods=['POST'])
 def transacao():
     dados = request.json  # Obtém os dados JSON da requisição
-    #logger.debug(f"Dados recebidos para a transação: {dados}")
 
     if not isinstance(dados, list):
         dados = [dados]  # Transforma um único objeto em uma lista para processamento uniforme
@@ -43,8 +42,6 @@ def transacao():
                 'id_receptor': id_receptor,
                 'quantia': quantia
             }
-
-            #logger.debug(f"Dados antes da geração da chave de validação: {transacao_dados}")
 
             # Verifica se os validadores já foram selecionados
             validadores_selecionados = current_app.config.get('validadores_selecionados')
@@ -133,6 +130,9 @@ def transacao():
                     logger.debug(f"Saldo atualizado do remetente: {remetente.saldo}")
                     logger.debug(f"Saldo atualizado do receptor: {receptor.saldo}")
                     resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Transação feita com sucesso', 'status': 'sucesso'})
+                    
+                    # Distribui as taxas
+                    distribuir_taxas(transacao_atual, seletor)
                 else:
                     resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                     resultados.append(resultado)

@@ -35,9 +35,9 @@ def simular_transacoes(num_transacoes):
             }
 
             resposta = app.test_client().post('/trans', json=transacao_dados)
-            print(f"Transação: {transacao_dados}")
-            print(f"Resposta: {resposta.json}")
+            #print(f"Transação: {transacao_dados}")
+            #print(f"Resposta: {resposta.json}")
 
 if __name__ == '__main__':
-    num_transacoes = 100
+    num_transacoes = 1000
     simular_transacoes(num_transacoes)

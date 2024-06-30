@@ -23,7 +23,7 @@ def criar_e_popular_banco():
         db.create_all()
 
         # Cria usuários aleatórios a partir do indice 1
-        for i in range(1, 31):
+        for i in range(1, 34):
             usuario = Usuario(
                 nome=f'usuario{i}',
                 saldo=random.uniform(1000, 5000)
@@ -39,7 +39,7 @@ def criar_e_popular_banco():
         db.session.commit() 
 
         # Cria validadores aleatórios associados ao seletor a partir do indice 1
-        for i in range(1, 61):
+        for i in range(1, 31):
             chave_validador = gerar_chave(seletor.id, f'validador{i}')
             validador = Validador(
                 endereco=f'validador{i}',

@@ -162,8 +162,8 @@ def gerenciar_consenso(transacoes, validadores, seletor):
         distribuir_taxas(transacao, seletor)  # Distribui as taxas
 
         if consenso == 1 and validadores_maliciosos:  # Transação rejeitada para validadores maliciosos
-            validador_malicioso = random.choice(validadores_maliciosos)
-            update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG ao validador malicioso
+            for validador_malicioso in validadores_maliciosos:
+                update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG a cada validador malicioso
 
         resultados.append({'id_transacao': transacao.id, 'status': 'validada' if consenso == 1 else 'rejeitada'})
 
@@ -311,10 +311,13 @@ def distribuir_taxas(transacao, seletor):
     if not validadores:
         return {'mensagem': 'Sem validadores disponíveis', 'status_code': 503}
 
-    # Distribui as taxas entre os validadores
+    # Distribui a taxa de 1% entre os validadores
     for validador in validadores:
-        validador.stake += taxa_validadores / len(validadores)  # 1% entre os validadores igualmente
-        validador.stake += taxa_travada / len(validadores)  # 0,5% travado para os validadores
+        validador.stake += taxa_validadores / len(validadores)
+
+    # Adiciona a taxa travada de 0,5% a cada validador individualmente
+    for validador in validadores:
+        validador.stake += taxa_travada
 
     # Adiciona a taxa ao saldo do seletor
     seletor.saldo += taxa_seletor

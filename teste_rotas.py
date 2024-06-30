@@ -44,7 +44,7 @@ class TesteRotas(unittest.TestCase):
             db.session.add_all([usuario1, usuario2, validador1, validador2, validador4, validador5, validador6, validador7, validador8, validador9, validador10])
             db.session.commit()
 
-    def test_transacao_bem_sucedida(self):
+    def teste_transacao_bem_sucedida(self):
         with self.app.app_context():
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
@@ -66,7 +66,7 @@ class TesteRotas(unittest.TestCase):
             self.assertIn('mensagem', resposta.json[0])
             self.assertIn('Transação feita com sucesso', resposta.json[0]['mensagem'])
     
-    def test_multiplas_transacoes(self):
+    def teste_multiplas_transacoes(self):
         with self.app.app_context():
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
@@ -97,7 +97,7 @@ class TesteRotas(unittest.TestCase):
                 self.assertIn('mensagem', resultado) 
                 self.assertIn('Transação feita com sucesso', resultado['mensagem'])
 
-    def test_chave_invalida(self):
+    def teste_chave_invalida(self):
         with self.app.app_context():
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
@@ -113,7 +113,7 @@ class TesteRotas(unittest.TestCase):
             self.assertEqual(resposta.status_code, 200)
             self.assertIn('Chave de validação inválida', resposta.json[0]['mensagem'])
 
-    def test_saldo_insuficiente(self):
+    def teste_saldo_insuficiente(self):
         with self.app.app_context():
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
