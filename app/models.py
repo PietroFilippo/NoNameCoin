@@ -32,7 +32,7 @@ class Validador(db.Model):
     endereco = db.Column(db.String(100), unique=True, nullable=False)
     stake = db.Column(db.Float, nullable=False) # Quantia "apostada"
     key = db.Column(db.String(100), nullable=False) # Chave única do seletor
-    chave_seletor = db.Column(db.String(100), nullable=False) # Adiciona a coluna chave_seletor
+    chave_seletor = db.Column(db.String(100), nullable=False) # Chave usada para a transação dada pelo seletor
     flag = db.Column(db.Integer, default=0) # Flags de alertas
     status = db.Column(db.String(50), default='ativo') # Status do validador
     selecoes_consecutivas = db.Column(db.Integer, default=0) # Número de seleções consecutivas

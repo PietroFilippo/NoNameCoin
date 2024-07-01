@@ -4,14 +4,11 @@ from datetime import datetime
 from flask import current_app
 from app import criar_app, db
 from app.models import Usuario, Validador, Seletor, Transacao
-from app.validacao import gerar_chave, selecionar_validadores, gerenciar_consenso
+from app.validacao import gerar_chave
 
 # Configuração do logger para depuração
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-# URL base para as requisições
-BASE_URL = 'http://127.0.0.1:5000'
 
 class TesteRotas(unittest.TestCase):
     @classmethod
@@ -27,6 +24,7 @@ class TesteRotas(unittest.TestCase):
             # Criação de 2 usuários e do seletor
             usuario1 = Usuario(nome='usuario1', saldo=600.0)
             usuario2 = Usuario(nome='usuario2', saldo=200.0)
+            usuario3 = Usuario(nome='usuario3', saldo=100.0)
             seletor1 = Seletor(endereco='seletor1', saldo=100.0)
             db.session.add(seletor1)
             db.session.commit()
@@ -41,15 +39,32 @@ class TesteRotas(unittest.TestCase):
             validador8 = Validador(endereco='validador8', stake=150.0, key='key8', chave_seletor='1-validador8', seletor_id=seletor1.id, status='expulso')
             validador9 = Validador(endereco='validador9', stake=100.0, key='key9', chave_seletor='1-validador9', seletor_id=seletor1.id)
             validador10 = Validador(endereco='validador10', stake=100.0, key='key10', chave_seletor='1-validador10', seletor_id=seletor1.id)
-            db.session.add_all([usuario1, usuario2, validador1, validador2, validador4, validador5, validador6, validador7, validador8, validador9, validador10])
+            validador11 = Validador(endereco='validador11', stake=10.0, key='key11', chave_seletor='1-validador11', seletor_id=seletor1.id)
+            db.session.add_all([usuario1, usuario2, usuario3, validador1, validador2, validador4, validador5, validador6, validador7, validador8, validador9, validador10, validador11])
             db.session.commit()
+
+    def obter_seletor(self):
+        with self.app.app_context():
+            # Obtém o seletor do banco de dados
+            seletor = Seletor.query.first()
+            return seletor.id if seletor else None
+
+    def selecionar_validadores(self):
+        seletor_id = self.obter_seletor()
+        if not seletor_id:
+            self.fail("Seletor não encontrado.")
+        
+        resposta_selecao = self.client.post(f'/seletor/{seletor_id}/selecionar_validadores')
+        self.assertEqual(resposta_selecao.status_code, 200, "Erro ao selecionar validadores")
+        
+        validadores_ids = resposta_selecao.json['validadores']
+        validadores = Validador.query.filter(Validador.id.in_(validadores_ids)).all()
+        current_app.config['validadores_selecionados'] = validadores
+        return validadores
 
     def teste_transacao_bem_sucedida(self):
         with self.app.app_context():
-            validadores_selecionados = selecionar_validadores()
-            current_app.config['validadores_selecionados'] = validadores_selecionados
-
-            # Gera as chaves de validação para todos os validadores selecionados
+            validadores_selecionados = self.selecionar_validadores()
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
 
@@ -67,9 +82,7 @@ class TesteRotas(unittest.TestCase):
     
     def teste_multiplas_transacoes(self):
         with self.app.app_context():
-            validadores_selecionados = selecionar_validadores()
-            current_app.config['validadores_selecionados'] = validadores_selecionados
-
+            validadores_selecionados = self.selecionar_validadores()
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             chaves_validacao_1 = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
             chaves_validacao_2 = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
@@ -79,13 +92,13 @@ class TesteRotas(unittest.TestCase):
                     'id_remetente': 1,
                     'id_receptor': 2,
                     'quantia': 50.0,
-                    'keys_validacao': chaves_validacao_1  # Utiliza apenas a primeira chave para simplificar o teste
+                    'keys_validacao': chaves_validacao_1
                 },
                 {
                     'id_remetente': 2,
                     'id_receptor': 1,
                     'quantia': 30.0,
-                    'keys_validacao': chaves_validacao_2  # Utiliza apenas a primeira chave para simplificar o teste
+                    'keys_validacao': chaves_validacao_2
                 }
             ]
 
@@ -97,10 +110,7 @@ class TesteRotas(unittest.TestCase):
 
     def teste_chave_invalida(self):
         with self.app.app_context():
-            validadores_selecionados = selecionar_validadores()
-            current_app.config['validadores_selecionados'] = validadores_selecionados
-
-            # Gera uma chave inválida que não corresponde às chaves de validação geradas
+            self.selecionar_validadores()
             chave_invalida = 'chave_invalida'
 
             transacao_dados = {
@@ -116,17 +126,14 @@ class TesteRotas(unittest.TestCase):
 
     def teste_saldo_insuficiente(self):
         with self.app.app_context():
-            validadores_selecionados = selecionar_validadores()
-            current_app.config['validadores_selecionados'] = validadores_selecionados
-
-            # Gera as chaves de validação para todos os validadores selecionados
+            validadores_selecionados = self.selecionar_validadores()
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
 
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
-                'quantia': 1000.0,  # Quantia alta para garantir que o saldo seja insuficiente
+                'quantia': 1000.0,
                 'keys_validacao': chaves_validacao
             }
 
@@ -149,6 +156,14 @@ class TesteRotas(unittest.TestCase):
         resposta = self.client.post('/validador/registrar', json=dados)
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(f'Validador de endereço {dados["endereco"]} foi registrado', resposta.json['mensagem'])
+
+    def teste_editar_validador(self):
+        dados = {
+            'stake': 500.0
+        }
+        resposta = self.client.post('/validador/editar/10', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Validador com ID 10 foi atualizado', resposta.json['mensagem'])
 
     def teste_reativar_validador(self):
         dados = {
@@ -187,6 +202,32 @@ class TesteRotas(unittest.TestCase):
         resposta = self.client.post('/validador/flag', json=dados)
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(f'Flag do validador de endereço {dados["endereco"]} foi atualizado', resposta.json['mensagem'])
+
+    def teste_registrar_usuario(self):
+        dados = {
+            'nome': 'usuario4',
+            'saldo': 300.0
+        }
+        resposta = self.client.post('/usuario/registrar', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Usuário {dados["nome"]} foi registrado', resposta.json['mensagem'])
+
+    def teste_editar_usuario(self):
+        dados = {
+            'id': 1,
+            'nome': 'ABC',
+        }
+        resposta = self.client.post('/usuario/editar/1', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Usuário {dados["nome"]} foi atualizado', resposta.json['mensagem'])
+
+    def teste_remover_usuario(self):
+        dados = {
+            'nome': 'usuario3'
+        }
+        resposta = self.client.post('/usuario/remover', json=dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(f'Usuário {dados["nome"]} foi removido', resposta.json['mensagem'])
 
 if __name__ == '__main__':
     unittest.main()

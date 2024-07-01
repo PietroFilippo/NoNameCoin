@@ -59,10 +59,6 @@ def simular_transacoes(num_transacoes):
             print(f"Transação: {transacao_dados}")
             print(f"Resposta: {resposta.json}")
 
-            # Adiciona um delay aleatório entre 0.5 e 1.5 segundos
-            delay = random.uniform(0.5, 1.5)
-            time.sleep(delay)
-
 if __name__ == '__main__':
     num_transacoes = 50
     simular_transacoes(num_transacoes)

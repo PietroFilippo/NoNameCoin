@@ -140,7 +140,6 @@ def gerenciar_consenso(transacoes, validadores, seletor):
             if valido:
                 aprovacoes += 1
                 validador.transacoes_coerentes += 1
-                #logger.debug(f"Validador {validador.id} - Depois do incremento: {validador.transacoes_coerentes}")
             else:
                 rejeicoes += 1
                 validadores_maliciosos.append(validador)
@@ -154,7 +153,8 @@ def gerenciar_consenso(transacoes, validadores, seletor):
         transacao.status = consenso
         db.session.commit()  # Commit das alterações na transação
 
-        distribuir_taxas(transacao, seletor)  # Distribui as taxas
+        if consenso == 1:
+            distribuir_taxas(transacao, seletor, validadores)  # Distribui as taxas
 
         if consenso == 1 and validadores_maliciosos:  # Transação rejeitada para validadores maliciosos
             for validador_malicioso in validadores_maliciosos:
@@ -257,6 +257,20 @@ def registrar_validador_(endereco, stake, key, seletor_id):
 
     return {'mensagem': f'Validador de endereço {endereco} foi registrado', 'status_code': 200, 'chave_seletor': chave_seletor}
 
+def editar_validador_(validador_id, novo_stake):
+    # Encontra o validador pelo ID
+    validador = db.session.get(Validador, validador_id)
+    if not validador:
+        return {'mensagem': f'Validador com ID {validador_id} não encontrado', 'status_code': 404}
+
+    # Atualiza os campos do validador
+    validador.stake = novo_stake
+
+    # Persiste as mudanças no banco de dados
+    db.session.commit()
+
+    return {'mensagem': f'Validador com ID {validador_id} foi atualizado', 'status_code': 200}
+
 def expulsar_validador_(endereco):
     # Expulsa um validador
     validador = Validador.query.filter_by(endereco=endereco).first()
@@ -278,17 +292,38 @@ def remover_validador_(endereco):
     else:
         return {"mensagem": "Validador não encontrado", "status_code": 404}
     
-def registrar_seletor_(nome, endereco, saldo):
+def registrar_seletor_(endereco, saldo):
     # Registra um novo seletor
     seletor_existente = Seletor.query.filter_by(endereco=endereco).first()
     if seletor_existente:
         return {'mensagem': f'Seletor de endereço {endereco} já existe', 'status_code': 400}
 
-    novo_seletor = Seletor(nome=nome, endereco=endereco, saldo=saldo)
+    novo_seletor = Seletor(endereco=endereco, saldo=saldo)
     db.session.add(novo_seletor)
     db.session.commit()
 
     return {'mensagem': f'Seletor de endereço {endereco} foi registrado', 'status_code': 200}
+
+def editar_seletor_(seletor_id, novo_endereco, novo_saldo):
+        # Busca o seletor existente pelo ID
+        seletor = db.session.get(Seletor, seletor_id)
+        if not seletor:
+            return {'mensagem': 'Seletor não encontrado', 'status_code': 404}
+
+        # Verifica se o novo endereço já está em uso por outro seletor
+        if novo_endereco != seletor.endereco:
+            seletor_existente = Seletor.query.filter_by(endereco=novo_endereco).first()
+            if seletor_existente:
+                return {'mensagem': f'Endereço {novo_endereco} já está em uso por outro seletor', 'status_code': 400}
+
+        # Atualiza os campos do seletor
+        seletor.endereco = novo_endereco
+        seletor.saldo = novo_saldo
+
+        # Persiste as mudanças no banco de dados
+        db.session.commit()
+
+        return {'mensagem': f'Seletor {seletor_id} atualizado com sucesso', 'status_code': 200}
 
 def remover_seletor_(endereco):
     # Remove um seletor do banco de dados
@@ -300,20 +335,20 @@ def remover_seletor_(endereco):
     else:
         return {"mensagem": "Seletor não encontrado", "status_code": 404}
 
-def distribuir_taxas(transacao, seletor):
+def distribuir_taxas(transacao, seletor, validadores):
     # Distribui as taxas de uma transação entre o seletor e os validadores
     quantia_transacionada = transacao.quantia
     taxa_seletor = quantia_transacionada * 0.015  # 1,5% da quantia transacionada
     taxa_validadores = quantia_transacionada * 0.01  # 1% da quantia transacionada
     taxa_travada = quantia_transacionada * 0.005  # 0,5% da quantia transacionada
 
-    validadores = selecionar_validadores()
     if not validadores:
         return {'mensagem': 'Sem validadores disponíveis', 'status_code': 503}
 
     # Distribui a taxa de 1% entre os validadores
+    taxa_por_validador = taxa_validadores / len(validadores)
     for validador in validadores:
-        validador.stake += taxa_validadores / len(validadores)
+        validador.stake += taxa_por_validador
 
     # Adiciona a taxa travada de 0,5% a cada validador individualmente
     for validador in validadores:

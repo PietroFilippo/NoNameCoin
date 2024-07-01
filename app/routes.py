@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 from .models import db, Usuario, Transacao, Seletor
 from .validacao import (
-    distribuir_taxas, gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, 
+    editar_seletor_, editar_validador_, gerenciar_consenso, update_flags_validador, hold_validador_, registrar_validador_, expulsar_validador_, 
     selecionar_validadores, gerar_chave, lista_validadores, remover_validador_, registrar_seletor_, remover_seletor_
 )
 import logging
@@ -129,9 +129,6 @@ def transacao():
                     receptor.saldo += quantia
                     db.session.commit()
                     resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Transação feita com sucesso', 'status': 'sucesso'})
-
-                    # Distribui as taxas
-                    distribuir_taxas(transacao_atual, seletor)
                 else:
                     resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                     resultados.append(resultado)
@@ -167,6 +164,14 @@ def registrar_validador():
     seletor_id = dados.get('seletor_id')
     resultado = registrar_validador_(endereco, stake, key, seletor_id)
     logger.debug(f"Resultado do registro do validador: {resultado}")
+    return jsonify(resultado), resultado['status_code']
+
+@bp.route('/validador/editar/<int:validador_id>', methods=['POST'])
+def editar_validador(validador_id):
+    # Edita um validador existente
+    dados = request.get_json()
+    stake = dados.get('stake')
+    resultado = editar_validador_(validador_id, stake)
     return jsonify(resultado), resultado['status_code']
 
 @bp.route('/validador/expulsar', methods=['POST'])
@@ -227,10 +232,18 @@ def hold_validador():
 @bp.route('/seletor/registrar', methods=['POST'])
 def registrar_seletor():
     dados = request.get_json()
-    nome = dados.get('nome')
     endereco = dados.get('endereco')
     saldo = dados.get('saldo')
-    resultado = registrar_seletor_(nome, endereco, saldo)
+    resultado = registrar_seletor_(endereco, saldo)
+    return jsonify(resultado), resultado['status_code']
+
+# Rota para editar um seletor existente
+@bp.route('/seletor/editar/<int:seletor_id>', methods=['POST'])
+def editar_seletor(seletor_id):
+    dados = request.get_json()
+    endereco = dados.get('endereco')
+    saldo = dados.get('saldo')
+    resultado = editar_seletor_(seletor_id, endereco, saldo)
     return jsonify(resultado), resultado['status_code']
 
 # Rota para remover um seletor
@@ -241,6 +254,7 @@ def remover_seletor():
     resultado = remover_seletor_(endereco)
     return jsonify(resultado), resultado['status_code']
 
+# Rota para um seletor selecionar validadores
 @bp.route('/seletor/<int:seletor_id>/selecionar_validadores', methods=['POST'])
 def selecionar_validadores_seletor(seletor_id):
     try:
@@ -259,3 +273,56 @@ def selecionar_validadores_seletor(seletor_id):
     except Exception as e:
         logger.error("Erro ao selecionar validadores", exc_info=True)
         return jsonify({'mensagem': str(e), 'status_code': 500}), 500
+
+# Rota para registrar um usuário
+@bp.route('/usuario/registrar', methods=['POST'])
+def registrar_usuario():
+    dados = request.get_json()
+    nome = dados.get('nome')
+    saldo = dados.get('saldo', 0.0)  # saldo default se não fornecido
+    
+    # Verifica se o usuário já existe pelo nome
+    usuario_existente = Usuario.query.filter_by(nome=nome).first()
+    if usuario_existente:
+        return jsonify({'mensagem': f'Usuário {nome} já existe', 'status_code': 400}), 400
+
+    novo_usuario = Usuario(nome=nome, saldo=saldo)
+    db.session.add(novo_usuario)
+    db.session.commit()
+
+    return jsonify({'mensagem': f'Usuário {nome} foi registrado', 'status_code': 200}), 200
+
+# Rota para editar um usuário existente
+@bp.route('/usuario/editar/<int:usuario_id>', methods=['POST'])
+def editar_usuario(usuario_id):
+    dados = request.get_json()
+    nome = dados.get('nome')
+    saldo = dados.get('saldo')
+
+    usuario = db.session.get(Usuario, usuario_id)
+    if not usuario:
+        return jsonify({'mensagem': 'Usuário não encontrado', 'status_code': 404}), 404
+
+    if nome:
+        usuario.nome = nome
+    if saldo is not None:
+        usuario.saldo = saldo
+
+    db.session.commit()
+
+    return jsonify({'mensagem': f'Usuário {usuario.nome} foi atualizado', 'status_code': 200}), 200
+
+# Rota para remover um usuário
+@bp.route('/usuario/remover', methods=['POST'])
+def remover_usuario():
+    dados = request.get_json()
+    nome = dados.get('nome')
+
+    usuario = Usuario.query.filter_by(nome=nome).first()
+    if not usuario:
+        return jsonify({'mensagem': 'Usuário não encontrado', 'status_code': 404}), 404
+
+    db.session.delete(usuario)
+    db.session.commit()
+
+    return jsonify({'mensagem': f'Usuário {nome} foi removido', 'status_code': 200}), 200
