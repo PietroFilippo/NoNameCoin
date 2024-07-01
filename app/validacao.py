@@ -7,11 +7,6 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Define o nível de log
 
-def gerar_chave(seletor_id, validador_endereco):
-    # Gera uma chave de validação com base no seletor e no endereço do validador
-    chave = f"{seletor_id}-{validador_endereco}"
-    return chave
-
 def selecionar_validadores():
     # Seleciona os validadores disponíveis
     validadores_disponiveis = Validador.query.filter_by(status='ativo').all()
@@ -114,7 +109,7 @@ def logica_validacao(validador, transacao):
         logger.debug(f"Chave de validação inválida: fornecida {validador.chave_seletor}, esperada {chaves_validacao}")
         return False, "Chave de validação inválida"
 
-    logger.debug("Chave de validação válida")
+    logger.debug(f"Chave de validação válida. Chave do validador: {validador.chave_seletor}, Chaves da transação: {chaves_validacao}")
     return True, "Validação bem-sucedida"
 
 def gerenciar_consenso(transacoes, validadores, seletor):
@@ -212,6 +207,11 @@ def hold_validador_(endereco):
     validador.status = 'on_hold'
     db.session.commit()
     return {'mensagem': f'Validador de endereço {endereco} está on hold', 'status_code': 200}
+
+def gerar_chave(seletor_id, validador_endereco):
+    # Gera uma chave de validação com base no seletor e no endereço do validador
+    chave = f"{seletor_id}-{validador_endereco}"
+    return chave
 
 def registrar_validador_(endereco, stake, key, seletor_id):
     # Registra um novo validador

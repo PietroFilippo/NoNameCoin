@@ -32,9 +32,9 @@ def transacao():
             id_remetente = transacao.get('id_remetente')
             id_receptor = transacao.get('id_receptor')
             quantia = transacao.get('quantia')
-            chave_fornecida = transacao.get('keys_validacao')  # Obtém a chave de validação fornecida
+            chaves_validacao = transacao.get('keys_validacao')  # Lista de chaves de validação
 
-            if not all([id_remetente, id_receptor, quantia, chave_fornecida]):
+            if not all([id_remetente, id_receptor, quantia, chaves_validacao]):
                 raise ValueError("Dados da transação incompletos")
 
             transacao_dados = {
@@ -46,15 +46,20 @@ def transacao():
             # Verifica se os validadores já foram selecionados
             validadores_selecionados = current_app.config.get('validadores_selecionados')
             if not validadores_selecionados:
-                validadores_selecionados = selecionar_validadores()
-                current_app.config['validadores_selecionados'] = validadores_selecionados
+                return jsonify({'mensagem': 'Validadores não selecionados', 'status_code': 400}), 400
 
             logger.debug(f"Validadores selecionados: {[v.endereco for v in validadores_selecionados]}")
 
-            # Gera as chaves de validação para a transação
-            seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
-            transacao_dados['keys_validacao'] = chaves_validacao
+            # Verifica se todas as chaves de validação fornecidas são válidas
+            chaves_geradas = [gerar_chave(v.seletor_id, v.endereco) for v in validadores_selecionados]
+            chaves_validas = all(k in chaves_geradas for k in chaves_validacao)
+
+            if not chaves_validas:
+                logger.debug(f"Chave de validação inválida: fornecida {chaves_validacao}")
+                resultados.append({'mensagem': 'Chave de validação inválida', 'status_code': 400})
+                continue
+
+            transacao_dados['keys_validacao'] = ",".join(chaves_validacao)
             logger.debug(f"Chaves de validação a serem armazenadas na transação: {chaves_validacao}")
 
             # Cria e armazena a nova transação no banco de dados
@@ -63,13 +68,12 @@ def transacao():
                 id_receptor=id_receptor,
                 quantia=quantia,
                 status=0,
-                keys_validacao=",".join(chaves_validacao),
+                keys_validacao=",".join(chaves_validacao),  # Armazena as chaves de validação como string separada por vírgulas
                 horario=datetime.utcnow()
             )
 
             db.session.add(nova_transacao)
             db.session.commit()
-            #logger.debug("Chaves de validação armazenadas na transação com sucesso.")
 
         except Exception as e:
             # Lida com exceções durante a criação da transação
@@ -79,7 +83,7 @@ def transacao():
 
         try:
             # Recupera a nova transação criada do banco de dados
-            transacao_atual = Transacao.query.get(nova_transacao.id)
+            transacao_atual = db.session.get(Transacao, nova_transacao.id)
             if not transacao_atual:
                 logger.error("Transação não encontrada no banco de dados")
                 resultados.append({'mensagem': 'Transação não encontrada', 'status_code': 404})
@@ -90,7 +94,7 @@ def transacao():
             taxa = quantia * 0.015
             if remetente.saldo < (quantia + taxa):
                 logger.debug(f"Saldo insuficiente: {remetente.saldo} < {quantia} + {taxa}")
-                transacao_atual.status = 2  # Status 2 = transação rejeitada
+                transacao_atual.status = 2  # Status 2 = transação rejeitada por saldo insuficiente
                 db.session.commit()
                 resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Saldo insuficiente', 'status': 'rejeitada'})
                 continue
@@ -102,19 +106,17 @@ def transacao():
                 resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Erro ao obter o tempo atual', 'status': 'rejeitada'})
                 continue
 
-            tempo_atual = datetime.fromisoformat(resposta_tempo_atual.json()['tempo_atual'])
-            #logger.debug(f"Tempo atual sincronizado: {tempo_atual}")
-
             # Verifica a chave de validação fornecida
             chaves_geradas = transacao_atual.keys_validacao.split(",")
-            if chave_fornecida not in chaves_geradas:
-                logger.debug(f"Chave de validação inválida: fornecida {chave_fornecida}")
-                transacao_atual.status = 2  # Status 2 = transação rejeitada
+            if not any(k in chaves_geradas for k in chaves_validacao):
+                logger.debug(f"Chave de validação inválida: fornecida {chaves_validacao}")
+                transacao_atual.status = 2  # Status 2 = transação rejeitada por chave de validação inválida
                 db.session.commit()
                 resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Chave de validação inválida', 'status': 'rejeitada'})
                 continue
 
             # Gerencia o consenso dos validadores para a transação
+            seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             seletor = db.session.get(Seletor, seletor_id)
             resultado = gerenciar_consenso([transacao_atual], validadores_selecionados, seletor)
             logger.debug(f"Resultado da validação do consenso: {resultado}")
@@ -122,15 +124,12 @@ def transacao():
             if resultado['status_code'] == 200:
                 if transacao_atual.status == 1:
                     # Se a transação é validada com sucesso, atualiza os saldos
-                    #logger.debug(f"Transação {transacao_atual.id} foi validada com sucesso")
                     remetente.saldo -= quantia
                     receptor = db.session.get(Usuario, id_receptor)
                     receptor.saldo += quantia
                     db.session.commit()
-                    logger.debug(f"Saldo atualizado do remetente: {remetente.saldo}")
-                    logger.debug(f"Saldo atualizado do receptor: {receptor.saldo}")
                     resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Transação feita com sucesso', 'status': 'sucesso'})
-                    
+
                     # Distribui as taxas
                     distribuir_taxas(transacao_atual, seletor)
                 else:
@@ -138,7 +137,7 @@ def transacao():
                     resultados.append(resultado)
             else:
                 # Se a transação é rejeitada pelo consenso dos validadores
-                transacao_atual.status = 2  # Status 2 = transação rejeitada
+                transacao_atual.status = 2  # Status 2 = transação rejeitada por consenso
                 db.session.commit()
                 resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                 resultados.append(resultado)
@@ -241,3 +240,22 @@ def remover_seletor():
     endereco = dados.get('endereco')
     resultado = remover_seletor_(endereco)
     return jsonify(resultado), resultado['status_code']
+
+@bp.route('/seletor/<int:seletor_id>/selecionar_validadores', methods=['POST'])
+def selecionar_validadores_seletor(seletor_id):
+    try:
+        seletor = db.session.get(Seletor, seletor_id)
+        if not seletor:
+            return jsonify({'mensagem': 'Seletor não encontrado', 'status_code': 404}), 404
+
+        validadores_selecionados = selecionar_validadores()
+        if not validadores_selecionados:
+            return jsonify({'mensagem': 'Não há validadores suficientes', 'status_code': 400}), 400
+
+        # Armazena os validadores selecionados na configuração da aplicação
+        current_app.config['validadores_selecionados'] = validadores_selecionados
+        current_app.config['seletor_id'] = seletor_id
+        return jsonify({'mensagem': 'Validadores selecionados com sucesso', 'validadores': [v.id for v in validadores_selecionados]}), 200
+    except Exception as e:
+        logger.error("Erro ao selecionar validadores", exc_info=True)
+        return jsonify({'mensagem': str(e), 'status_code': 500}), 500

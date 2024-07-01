@@ -24,7 +24,7 @@ class TesteRotas(unittest.TestCase):
             # Limpa e cria o banco de dados
             db.drop_all()
             db.create_all()
-            # Criação de alguns usuários e do seletor
+            # Criação de 2 usuários e do seletor
             usuario1 = Usuario(nome='usuario1', saldo=600.0)
             usuario2 = Usuario(nome='usuario2', saldo=200.0)
             seletor1 = Seletor(endereco='seletor1', saldo=100.0)
@@ -33,7 +33,7 @@ class TesteRotas(unittest.TestCase):
             
             # Criação de alguns validadores
             validador1 = Validador(endereco='validador1', stake=200.0, key='key1', chave_seletor='1-validador1', seletor_id=seletor1.id)
-            validador2 = Validador(endereco='validador2', stake=350.0, key='key2', chave_seletor='1-validador2', seletor_id=seletor1.id)
+            validador2 = Validador(endereco='validador2', stake=350.0, key='key2', chave_seletor='1-validador2', seletor_id=seletor1.id, flag=1, transacoes_coerentes=9999)
             validador4 = Validador(endereco='validador4', stake=250.0, key='key4', chave_seletor='1-validador4', seletor_id=seletor1.id)
             validador5 = Validador(endereco='validador5', stake=300.0, key='key5', chave_seletor='1-validador5', seletor_id=seletor1.id)
             validador6 = Validador(endereco='validador6', stake=250.0, key='key6', chave_seletor='1-validador6', seletor_id=seletor1.id)
@@ -48,20 +48,19 @@ class TesteRotas(unittest.TestCase):
         with self.app.app_context():
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
-    
+
             # Gera as chaves de validação para todos os validadores selecionados
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
-    
+
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
                 'quantia': 100.0,
-                'keys_validacao': chaves_validacao[0]
+                'keys_validacao': chaves_validacao
             }
-    
+
             resposta = self.client.post('/trans', json=transacao_dados)
-            print(resposta.json)
             self.assertEqual(resposta.status_code, 200)
             self.assertIn('mensagem', resposta.json[0])
             self.assertIn('Transação feita com sucesso', resposta.json[0]['mensagem'])
@@ -80,21 +79,20 @@ class TesteRotas(unittest.TestCase):
                     'id_remetente': 1,
                     'id_receptor': 2,
                     'quantia': 50.0,
-                    'keys_validacao': chaves_validacao_1[0]
+                    'keys_validacao': chaves_validacao_1  # Utiliza apenas a primeira chave para simplificar o teste
                 },
                 {
                     'id_remetente': 2,
                     'id_receptor': 1,
                     'quantia': 30.0,
-                    'keys_validacao': chaves_validacao_2[0]
+                    'keys_validacao': chaves_validacao_2  # Utiliza apenas a primeira chave para simplificar o teste
                 }
             ]
 
             resposta = self.client.post('/trans', json=transacoes_dados)
-            print(resposta.json)
             self.assertEqual(resposta.status_code, 200)
             for resultado in resposta.json:
-                self.assertIn('mensagem', resultado) 
+                self.assertIn('mensagem', resultado)
                 self.assertIn('Transação feita com sucesso', resultado['mensagem'])
 
     def teste_chave_invalida(self):
@@ -102,11 +100,14 @@ class TesteRotas(unittest.TestCase):
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
 
+            # Gera uma chave inválida que não corresponde às chaves de validação geradas
+            chave_invalida = 'chave_invalida'
+
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
                 'quantia': 10.0,
-                'keys_validacao': 'chave_invalida'
+                'keys_validacao': chave_invalida
             }
 
             resposta = self.client.post('/trans', json=transacao_dados)
@@ -118,13 +119,14 @@ class TesteRotas(unittest.TestCase):
             validadores_selecionados = selecionar_validadores()
             current_app.config['validadores_selecionados'] = validadores_selecionados
 
+            # Gera as chaves de validação para todos os validadores selecionados
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
-            chaves_validacao = gerar_chave(seletor_id, validadores_selecionados[0].endereco)
+            chaves_validacao = [gerar_chave(seletor_id, v.endereco) for v in validadores_selecionados]
 
             transacao_dados = {
                 'id_remetente': 1,
                 'id_receptor': 2,
-                'quantia': 1000.0,
+                'quantia': 1000.0,  # Quantia alta para garantir que o saldo seja insuficiente
                 'keys_validacao': chaves_validacao
             }
 
