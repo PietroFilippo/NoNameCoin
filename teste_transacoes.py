@@ -60,5 +60,5 @@ def simular_transacoes(num_transacoes):
             print(f"Resposta: {resposta.json}")
 
 if __name__ == '__main__':
-    num_transacoes = 50
+    num_transacoes = 500
     simular_transacoes(num_transacoes)

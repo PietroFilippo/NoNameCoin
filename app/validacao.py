@@ -106,7 +106,7 @@ def logica_validacao(validador, transacao):
     # Verifica a chave de validação
     chaves_validacao = transacao.keys_validacao.split(",")
     if validador.chave_seletor not in chaves_validacao:
-        logger.debug(f"Chave de validação inválida: fornecida {validador.chave_seletor}, esperada {chaves_validacao}")
+        logger.debug(f"Chave de validação inválida: fornecida: {validador.chave_seletor}, esperada {chaves_validacao}")
         return False, "Chave de validação inválida"
 
     logger.debug(f"Chave de validação válida. Chave do validador: {validador.chave_seletor}, Chaves da transação: {chaves_validacao}")
@@ -122,17 +122,12 @@ def gerenciar_consenso(transacoes, validadores, seletor):
         if not isinstance(transacao, Transacao):
             logger.error(f"Objeto inválido encontrado na lista de transações: {transacao}")
             continue
+
         aprovacoes = 0
         rejeicoes = 0
         validadores_maliciosos = []
-        chaves_validas = [validador.chave_seletor for validador in validadores]
-
-        # Verifica a chave de validação
-        chaves_validacao = transacao.keys_validacao.split(",")
-        if not all(chave in chaves_validacao for chave in chaves_validas):
-            logger.debug(f"Chave de validação inválida: esperadas {chaves_validas}, fornecidas {chaves_validacao}")
-            resultados.append({'id_transacao': transacao.id, 'status': 'rejeitada', 'mensagem': 'Chave de validação inválida'})
-            continue
+        rejeicoes_legitimas = False
+        #chaves_validas = [validador.chave_seletor for validador in validadores]
 
         # Verifica todos os validadores selecionados
         for validador in validadores:
@@ -142,23 +137,27 @@ def gerenciar_consenso(transacoes, validadores, seletor):
                 validador.transacoes_coerentes += 1
             else:
                 rejeicoes += 1
-                validadores_maliciosos.append(validador)
+                if motivo in ['Saldo insuficiente', 'Horário incorreto', 'Transação anterior à última', 'Número de transações excedido, remetente bloqueado', 'Remetente bloqueado']:  # Rejeição legítima
+                    rejeicoes_legitimas = True
+                else:
+                    validadores_maliciosos.append(validador)
 
             remover_flag_validador(validador)  # Remove flags do validador
             db.session.commit()  # Commit dentro do loop para persistir cada alteração
 
         logger.debug(f"Transação {transacao.id}: Aprovado por {aprovacoes} validadores, Rejeitado por {rejeicoes} validadores")
 
-        consenso = 1 if aprovacoes > len(validadores) // 2 else 2
+        # Verifica o consenso baseado na aprovação de pelo menos dois validadores honestos
+        consenso = 1 if aprovacoes > 1 else 2
         transacao.status = consenso
         db.session.commit()  # Commit das alterações na transação
 
         if consenso == 1:
-            distribuir_taxas(transacao, seletor, validadores)  # Distribui as taxas
+            distribuir_taxas(transacao, seletor, validadores, validadores_maliciosos)  # Distribui as taxas
 
-        if consenso == 1 and validadores_maliciosos:  # Transação rejeitada para validadores maliciosos
+        if not rejeicoes_legitimas:  # Adiciona flags aos validadores maliciosos
             for validador_malicioso in validadores_maliciosos:
-                update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG a cada validador malicioso
+                update_flags_validador(validador_malicioso.endereco, 'add')  # Aplica uma FLAG ao validador malicioso
 
         resultados.append({'id_transacao': transacao.id, 'status': 'validada' if consenso == 1 else 'rejeitada'})
 
@@ -229,7 +228,8 @@ def registrar_validador_(endereco, stake, key, seletor_id):
     if validador_existente:
         if validador_existente.status == 'expulso':
             if validador_existente.retorno_contagem >= 2:
-                return {'mensagem': f'Validador de endereço {endereco} não pode retornar mais vezes', 'status_code': 400}
+                remover_validador_(validador_existente.endereco)
+                return {'mensagem': f'Validador de endereço {endereco} não pode retornar mais vezes e será deletado da rede', 'status_code': 400}
             if stake < 2 * 50.0:
                 return {'mensagem': f'Validador de endereço {endereco} precisa travar pelo menos o dobro do saldo mínimo', 'status_code': 400}
             validador_existente.status = 'ativo'
@@ -335,23 +335,26 @@ def remover_seletor_(endereco):
     else:
         return {"mensagem": "Seletor não encontrado", "status_code": 404}
 
-def distribuir_taxas(transacao, seletor, validadores):
-    # Distribui as taxas de uma transação entre o seletor e os validadores
+def distribuir_taxas(transacao, seletor, validadores, validadores_maliciosos):
+    # Filtra validadores para remover os maliciosos
+    validadores_honestos = [validador for validador in validadores if validador not in validadores_maliciosos]
+
+    if not validadores_honestos:
+        return {'mensagem': 'Sem validadores honestos disponíveis', 'status_code': 503}
+
+    # Calcula as taxas
     quantia_transacionada = transacao.quantia
     taxa_seletor = quantia_transacionada * 0.015  # 1,5% da quantia transacionada
     taxa_validadores = quantia_transacionada * 0.01  # 1% da quantia transacionada
     taxa_travada = quantia_transacionada * 0.005  # 0,5% da quantia transacionada
 
-    if not validadores:
-        return {'mensagem': 'Sem validadores disponíveis', 'status_code': 503}
-
-    # Distribui a taxa de 1% entre os validadores
-    taxa_por_validador = taxa_validadores / len(validadores)
-    for validador in validadores:
+    # Distribui a taxa de 1% entre os validadores honestos
+    taxa_por_validador = taxa_validadores / len(validadores_honestos)
+    for validador in validadores_honestos:
         validador.stake += taxa_por_validador
 
     # Adiciona a taxa travada de 0,5% a cada validador individualmente
-    for validador in validadores:
+    for validador in validadores_honestos:
         validador.stake += taxa_travada
 
     # Adiciona a taxa ao saldo do seletor

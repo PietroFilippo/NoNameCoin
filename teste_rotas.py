@@ -34,7 +34,7 @@ class TesteRotas(unittest.TestCase):
             validador2 = Validador(endereco='validador2', stake=350.0, key='key2', chave_seletor='1-validador2', seletor_id=seletor1.id, flag=1, transacoes_coerentes=9999)
             validador4 = Validador(endereco='validador4', stake=250.0, key='key4', chave_seletor='1-validador4', seletor_id=seletor1.id)
             validador5 = Validador(endereco='validador5', stake=300.0, key='key5', chave_seletor='1-validador5', seletor_id=seletor1.id)
-            validador6 = Validador(endereco='validador6', stake=250.0, key='key6', chave_seletor='1-validador6', seletor_id=seletor1.id)
+            validador6 = Validador(endereco='validador6', stake=250.0, key='key6', chave_seletor='malicioso', seletor_id=seletor1.id)
             validador7 = Validador(endereco='validador7', stake=250.0, key='key7', chave_seletor='1-validador7', seletor_id=seletor1.id, status='on_hold')
             validador8 = Validador(endereco='validador8', stake=150.0, key='key8', chave_seletor='1-validador8', seletor_id=seletor1.id, status='expulso')
             validador9 = Validador(endereco='validador9', stake=100.0, key='key9', chave_seletor='1-validador9', seletor_id=seletor1.id)
@@ -108,21 +108,6 @@ class TesteRotas(unittest.TestCase):
                 self.assertIn('mensagem', resultado)
                 self.assertIn('Transação feita com sucesso', resultado['mensagem'])
 
-    def teste_chave_invalida(self):
-        with self.app.app_context():
-            self.selecionar_validadores()
-            chave_invalida = 'chave_invalida'
-
-            transacao_dados = {
-                'id_remetente': 1,
-                'id_receptor': 2,
-                'quantia': 10.0,
-                'keys_validacao': chave_invalida
-            }
-
-            resposta = self.client.post('/trans', json=transacao_dados)
-            self.assertEqual(resposta.status_code, 200)
-            self.assertIn('Chave de validação inválida', resposta.json[0]['mensagem'])
 
     def teste_saldo_insuficiente(self):
         with self.app.app_context():
