@@ -26,7 +26,7 @@ def criar_e_popular_banco():
         for i in range(1, 34):
             usuario = Usuario(
                 nome=f'usuario{i}',
-                saldo=random.uniform(1000, 5000)
+                saldo=random.uniform(1000, 3000)
             )
             db.session.add(usuario)
 

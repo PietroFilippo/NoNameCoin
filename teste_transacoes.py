@@ -46,13 +46,12 @@ def simular_transacoes(num_transacoes):
                 id_receptor = random.randint(1, num_usuarios)
 
             quantia = random.uniform(10, 500)
-            chave_validacao = chaves_validacao
 
             transacao_dados = {
                 'id_remetente': id_remetente,
                 'id_receptor': id_receptor,
                 'quantia': quantia,
-                'keys_validacao': chave_validacao
+                'keys_validacao': chaves_validacao
             }
 
             resposta = app.test_client().post('/trans', json=transacao_dados)
@@ -60,5 +59,5 @@ def simular_transacoes(num_transacoes):
             print(f"Resposta: {resposta.json}")
 
 if __name__ == '__main__':
-    num_transacoes = 500
+    num_transacoes = 300
     simular_transacoes(num_transacoes)

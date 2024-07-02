@@ -8,7 +8,7 @@ class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=False, nullable=False)
     saldo = db.Column(db.Float, default=0.0)
-    tempo_bloqueio = db.Column(db.DateTime, nullable=True)
+    tempo_bloqueio = db.Column(db.DateTime, nullable=True) # Tempo de um minuto de bloqueio caso o remetente faça mais que 100 transações em até um minuto
 
 # Classe Transacao
 class Transacao(db.Model):

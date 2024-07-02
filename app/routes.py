@@ -21,10 +21,11 @@ BASE_URL = 'http://127.0.0.1:5000' # URL base para as requisições internas
 def transacao():
     dados = request.json  # Obtém os dados JSON da requisição
 
+    # Verifica se os dados recebidos são uma lista. Se não forem, transforma o único objeto em uma lista.
     if not isinstance(dados, list):
         dados = [dados]  # Transforma um único objeto em uma lista para processamento uniforme
 
-    resultados = []
+    resultados = []  # Lista para armazenar os resultados das transações processadas
 
     for transacao in dados:
         try:
@@ -34,6 +35,7 @@ def transacao():
             quantia = transacao.get('quantia')
             chaves_validacao = transacao.get('keys_validacao')  # Lista de chaves de validação
 
+            # Verifica se todos os dados necessários da transação estão presentes
             if not all([id_remetente, id_receptor, quantia, chaves_validacao]):
                 raise ValueError("Dados da transação incompletos")
 
@@ -50,6 +52,7 @@ def transacao():
 
             logger.debug(f"Validadores selecionados: {[v.endereco for v in validadores_selecionados]}")
 
+            # Adiciona as chaves de validação aos dados da transação
             transacao_dados['keys_validacao'] = ",".join(chaves_validacao)
             logger.debug(f"Chaves de validação a serem armazenadas na transação: {chaves_validacao}")
 
@@ -70,16 +73,17 @@ def transacao():
             # Lida com exceções durante a criação da transação
             logger.error("Erro ao processar a transação", exc_info=True)
             resultados.append({'mensagem': str(e), 'status_code': 500})
-            continue
+            continue  # Continua para a próxima transação
 
     try:
-        # Recupera todas as transações criadas do banco de dados
+        # Recupera todas as transações criadas do banco de dados com status 0 (pendente)
         transacoes_criadas = db.session.query(Transacao).filter(Transacao.status == 0).all()
         
         # Verifica o saldo dos remetentes e gerencia o consenso
         for transacao_atual in transacoes_criadas:
             remetente = db.session.get(Usuario, transacao_atual.id_remetente)
             taxa = transacao_atual.quantia * 0.015
+            # Verifica se o remetente tem saldo suficiente
             if remetente.saldo < (transacao_atual.quantia + taxa):
                 logger.debug(f"Saldo insuficiente: {remetente.saldo} < {transacao_atual.quantia} + {taxa}")
                 transacao_atual.status = 2  # Status 2 = transação rejeitada por saldo insuficiente
@@ -105,10 +109,10 @@ def transacao():
                     resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                     resultados.append(resultado)
             else:
-                # Se a transação é rejeitada pelo consenso dos validadores
-                transacao_atual.status = 2  # Status 2 = transação rejeitada por consenso
+                # Se a transação é rejeitada pelo consenso
+                transacao_atual.status = 2  # Status 2
                 db.session.commit()
-                resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada por consenso', 'status': 'rejeitada'})
+                resultado.update({'id_transacao': transacao_atual.id, 'mensagem': 'Transação rejeitada', 'status': 'rejeitada'})
                 resultados.append(resultado)
 
     except Exception as e:
@@ -230,17 +234,20 @@ def remover_seletor():
 @bp.route('/seletor/<int:seletor_id>/selecionar_validadores', methods=['POST'])
 def selecionar_validadores_seletor(seletor_id):
     try:
+        # Obtem o seletor com o ID fornecido do banco de dados
         seletor = db.session.get(Seletor, seletor_id)
         if not seletor:
             return jsonify({'mensagem': 'Seletor não encontrado', 'status_code': 404}), 404
 
-        validadores_selecionados = selecionar_validadores()
+        # Chama a função selecionar_validadores passando o seletor e armazena os validadores selecionados
+        validadores_selecionados = selecionar_validadores(seletor)
         if not validadores_selecionados:
             return jsonify({'mensagem': 'Não há validadores suficientes', 'status_code': 400}), 400
 
-        # Armazena os validadores selecionados na configuração da aplicação
+        # Armazena os validadores selecionados e o ID do seletor na configuração da aplicação para uso na rota de transação
         current_app.config['validadores_selecionados'] = validadores_selecionados
         current_app.config['seletor_id'] = seletor_id
+        
         return jsonify({'mensagem': 'Validadores selecionados com sucesso', 'validadores': [v.id for v in validadores_selecionados]}), 200
     except Exception as e:
         logger.error("Erro ao selecionar validadores", exc_info=True)
@@ -276,7 +283,12 @@ def editar_usuario(usuario_id):
         return jsonify({'mensagem': 'Usuário não encontrado', 'status_code': 404}), 404
 
     if nome:
+        # Verifica se o nome já existe
+        nome_existe = db.session.query(Usuario.id).filter(Usuario.nome == nome, Usuario.id != usuario_id).first()
+        if nome_existe:
+            return jsonify({'mensagem': 'Nome já está em uso', 'status_code': 400}), 400
         usuario.nome = nome
+
     if saldo is not None:
         usuario.saldo = saldo
 
