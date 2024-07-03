@@ -1,5 +1,4 @@
 from flask import Blueprint, current_app, request, jsonify
-import requests
 from datetime import datetime
 from .models import db, Usuario, Transacao, Seletor
 from .validacao import (
@@ -39,22 +38,12 @@ def transacao():
             if not all([id_remetente, id_receptor, quantia, chaves_validacao]):
                 raise ValueError("Dados da transação incompletos")
 
-            transacao_dados = {
-                'id_remetente': id_remetente,
-                'id_receptor': id_receptor,
-                'quantia': quantia
-            }
-
             # Verifica se os validadores já foram selecionados
             validadores_selecionados = current_app.config.get('validadores_selecionados')
             if not validadores_selecionados:
                 return jsonify({'mensagem': 'Validadores não selecionados', 'status_code': 400}), 400
 
             logger.debug(f"Validadores selecionados: {[v.endereco for v in validadores_selecionados]}")
-
-            # Adiciona as chaves de validação aos dados da transação
-            transacao_dados['keys_validacao'] = ",".join(chaves_validacao)
-            logger.debug(f"Chaves de validação a serem armazenadas na transação: {chaves_validacao}")
 
             # Cria e armazena a nova transação no banco de dados
             nova_transacao = Transacao(
@@ -79,19 +68,8 @@ def transacao():
         # Recupera todas as transações criadas do banco de dados com status 0 (pendente)
         transacoes_criadas = db.session.query(Transacao).filter(Transacao.status == 0).all()
         
-        # Verifica o saldo dos remetentes e gerencia o consenso
+        # Gerencia o consenso dos validadores para cada transação pendente
         for transacao_atual in transacoes_criadas:
-            remetente = db.session.get(Usuario, transacao_atual.id_remetente)
-            taxa = transacao_atual.quantia * 0.015
-            # Verifica se o remetente tem saldo suficiente
-            if remetente.saldo < (transacao_atual.quantia + taxa):
-                logger.debug(f"Saldo insuficiente: {remetente.saldo} < {transacao_atual.quantia} + {taxa}")
-                transacao_atual.status = 2  # Status 2 = transação rejeitada por saldo insuficiente
-                db.session.commit()
-                resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Saldo insuficiente', 'status': 'rejeitada'})
-                continue
-
-            # Gerencia o consenso dos validadores para a transação
             seletor_id = validadores_selecionados[0].seletor_id if validadores_selecionados else None
             seletor = db.session.get(Seletor, seletor_id)
             resultado = gerenciar_consenso([transacao_atual], validadores_selecionados, seletor)
@@ -100,8 +78,9 @@ def transacao():
             if resultado['status_code'] == 200:
                 if transacao_atual.status == 1:
                     # Se a transação é validada com sucesso, atualiza os saldos
-                    remetente.saldo -= transacao_atual.quantia
+                    remetente = db.session.get(Usuario, transacao_atual.id_remetente)
                     receptor = db.session.get(Usuario, transacao_atual.id_receptor)
+                    remetente.saldo -= transacao_atual.quantia
                     receptor.saldo += transacao_atual.quantia
                     db.session.commit()
                     resultados.append({'id_transacao': transacao_atual.id, 'mensagem': 'Transação feita com sucesso', 'status': 'sucesso'})

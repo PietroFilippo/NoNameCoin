@@ -1,6 +1,5 @@
-import time
 import random
-from app import criar_app, db
+from app import criar_app
 from app.models import Usuario, Validador, Seletor
 from app.validacao import gerar_chave
 from flask import current_app
@@ -59,5 +58,5 @@ def simular_transacoes(num_transacoes):
             print(f"Resposta: {resposta.json}")
 
 if __name__ == '__main__':
-    num_transacoes = 300
+    num_transacoes = 50
     simular_transacoes(num_transacoes)

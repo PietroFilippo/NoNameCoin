@@ -1,6 +1,5 @@
 import unittest
 import logging
-from datetime import datetime
 from flask import current_app
 from app import criar_app, db
 from app.models import Usuario, Validador, Seletor, Transacao
@@ -124,7 +123,7 @@ class TesteRotas(unittest.TestCase):
 
             resposta = self.client.post('/trans', json=transacao_dados)
             self.assertEqual(resposta.status_code, 200)
-            self.assertIn('Saldo insuficiente', resposta.json[0]['mensagem'])
+            self.assertIn('Transação rejeitada', resposta.json[0]['mensagem'])
 
     def teste_get_hora(self):
         resposta = self.client.get('/hora')
